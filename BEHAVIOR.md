@@ -258,7 +258,7 @@ W1/W2 偏好只在任务等级、期限、效用和行程等指标相同后用�
 | `W.Degraded` | 保存最后有效历史但禁止用旧位置发动作；保留可可靠归属的实际回执；不猜补关键字段 | 通过完整重新校验的新帧 → Ready，发 WorldRecovered、失效旧路径/建议；G01 → Closed；否则返回兜底 |
 | `W.Closed` | 归档结果及已提交动作，停止新分配/认知调用；同场迟到数据仅作对账 | 本 session 不再退出；经 IF02 确认新比赛才新建 ColdStart，不能因 round 变小自行清空 |
 
-实体投影不是另一套行动调度器：可见且 HP 正为 ObservedAlive；明确死亡证据为 ConfirmedDead；失去可见性为 Unobserved；确认已拆除/清晨清理为 Removed，并记录原因。Unobserved 再观测到恢复 ObservedAlive；ConfirmedDead 仅明确复活可恢复；Removed 的新矿点即使同坐标也建新实例。武器 cooldown Unknown 不能投影为 Ready，矿点消失不能推断谁采走最后一件。
+实体投影不是另一套行动调度器：可见且 HP 正为 ObservedAlive；明确死亡证据为 ConfirmedDead；普通敌方角色离开局部视野为 Unobserved；全图可见的敌方基地/墙体从后续快照消失为 Removed，确认已拆除/清晨清理也为 Removed，并记录原因。消失本身不算己方击杀。Unobserved 再观测到恢复 ObservedAlive；ConfirmedDead 仅明确复活可恢复；Removed 的新矿点即使同坐标也建新实例。武器 cooldown Unknown 不能投影为 Ready，矿点消失不能推断谁采走最后一件。
 
 ### 5.2 战略 S：每轮产生一份 Directive
 

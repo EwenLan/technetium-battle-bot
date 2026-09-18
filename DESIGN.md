@@ -449,6 +449,7 @@ stateDiagram-v2
 | `EndgameWindowOpened` | 战略评估器 / P1 | 剩余回合、投资窗口、配置版本 | S；设置终盘标记 |
 | `UnitDied / UnitRevived` | world / P0 | entity、生命证据、last_seen_round | I/T/M/S；失能、替补或恢复派遣 |
 | `EnemyUnobserved` | world / P3 | entity、最后位置/时间、可见性类型 | 世界记忆/T；转为不确定风险，不发击杀报告 |
+| `EnemyRemoved` | world / P3 | 全图可见的敌方基地/墙实体、最后位置/时间 | 世界记忆/T；从当前占位移除；不把消失直接记为己方击杀 |
 | `EntityMoved / EntityHealthChanged` | world / P2 | entity、前后位置/血量、观测回合 | I/T/M；到位、效果对账、更新风险 |
 | `BuildingChanged / BaseDestroyed` | world / P0（毁坏）或 P2 | entity、kind、前后等级/存在性、证据 | S/M/T；建设确认、重规划、撤销不可完成的维修 |
 | `MineAppeared / MineDisappeared` | world / P3 | 矿点实例/坐标、矿种、证据 | M/T；创建或更换采集目标 |

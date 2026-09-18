@@ -96,7 +96,12 @@ fn append_enemy_visibility(
         .collect();
     for role in old {
         if !visible.contains(&role.id) {
-            events.push(WorldEvent::EnemyUnobserved(role.id));
+            let event = if crate::world::memory::globally_visible(&role.role_type) {
+                WorldEvent::EnemyRemoved(role.id)
+            } else {
+                WorldEvent::EnemyUnobserved(role.id)
+            };
+            events.push(event);
         }
     }
 }

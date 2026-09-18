@@ -9,6 +9,7 @@ pub enum WorldEvent {
     UnitRevived(i64),
     UnitMoved { id: i64, from: Pos, to: Pos },
     EnemyUnobserved(i64),
+    EnemyRemoved(i64),
     MineAppeared(Pos),
     MineDisappeared(Pos),
     GoldChanged { previous: i32, current: i32 },

@@ -14,6 +14,7 @@ const CONFLICT_GOLD: i32 = 74;
 const WEAPON_KEY: &str = "20";
 const CONTROLLER_KEY: &str = "10";
 const ENEMY_ID: i64 = 31;
+const ENEMY_BUILDING_ID: i64 = 32;
 const TASK_TEXT: &str = "Return the code";
 const ANSWER_TEXT: &str = "code";
 
@@ -113,6 +114,44 @@ fn hidden_enemy_becomes_unobserved_without_death_claim() {
             .contains(&WorldEvent::EnemyUnobserved(ENEMY_ID))
     );
     assert!(!world.events.contains(&WorldEvent::UnitDied(ENEMY_ID)));
+}
+
+#[test]
+fn vanished_globally_visible_enemy_building_is_removed() {
+    let mut first: serde_json::Value = serde_json::from_str(NIGHT_REQUEST).expect("fixture");
+    let mut building = first["teamOur"]["roles"][WORKER_INDEX].clone();
+    building["id"] = serde_json::Value::from(ENEMY_BUILDING_ID);
+    building["roleType"] = serde_json::Value::from("wall");
+    first["teamEnemy"]["roles"] = serde_json::Value::Array(vec![building]);
+    let mut second = first.clone();
+    second["roundNo"] = serde_json::Value::from(
+        first["roundNo"].as_i64().expect("round")
+            + i64::from(technetium_battle_bot::rules::constants::MIN_ACTION_ROUNDS),
+    );
+    second["teamEnemy"]["roles"] = serde_json::Value::Array(Vec::new());
+    let old = decode(&serde_json::to_vec(&first).expect("JSON"))
+        .expect("observation")
+        .observation;
+    let new = decode(&serde_json::to_vec(&second).expect("JSON"))
+        .expect("observation")
+        .observation;
+    let mut world = World::default();
+    world.apply(old);
+    world.apply(new);
+    assert_eq!(
+        world
+            .memory
+            .enemies
+            .get(&ENEMY_BUILDING_ID)
+            .expect("memory")
+            .status,
+        EnemyStatus::Removed
+    );
+    assert!(
+        world
+            .events
+            .contains(&WorldEvent::EnemyRemoved(ENEMY_BUILDING_ID))
+    );
 }
 
 #[test]

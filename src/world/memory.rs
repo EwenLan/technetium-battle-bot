@@ -13,11 +13,13 @@ pub enum EnemyStatus {
     ObservedUnknown,
     Unobserved,
     ConfirmedDead,
+    Removed,
 }
 
 #[derive(Clone, Debug)]
 pub struct RememberedEnemy {
     pub pos: Pos,
+    pub kind: String,
     pub last_seen_round: i32,
     pub status: EnemyStatus,
 }
@@ -40,7 +42,9 @@ pub struct NewsRecord {
 impl WorldMemory {
     pub fn observe(&mut self, observation: &Observation) {
         for memory in self.enemies.values_mut() {
-            if matches!(
+            if globally_visible(&memory.kind) {
+                memory.status = EnemyStatus::Removed;
+            } else if matches!(
                 memory.status,
                 EnemyStatus::ObservedAlive | EnemyStatus::ObservedUnknown
             ) {
@@ -65,6 +69,7 @@ impl WorldMemory {
                 role.id,
                 RememberedEnemy {
                     pos: role.pos,
+                    kind: role.role_type.clone(),
                     last_seen_round: round,
                     status,
                 },
@@ -101,6 +106,10 @@ impl WorldMemory {
             self.news.pop_first();
         }
     }
+}
+
+pub fn globally_visible(kind: &str) -> bool {
+    matches!(kind, "station" | "wall")
 }
 
 fn news_record(day: i32, channel: &'static str, content: &str) -> NewsRecord {
