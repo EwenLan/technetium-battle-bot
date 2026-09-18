@@ -45,6 +45,37 @@ impl<'a> WorldView<'a> {
             .collect()
     }
 
+    pub fn task_cells(&self, point: Pos) -> Vec<Pos> {
+        let Some(kind) = self.zone_at(point).map(|zone| zone.neutral_type.as_str()) else {
+            return vec![point];
+        };
+        if !kind.contains("TaskPoint") {
+            return vec![point];
+        }
+        self.observation
+            .map_info
+            .zones
+            .iter()
+            .filter(|zone| zone.neutral_type == kind)
+            .map(|zone| zone.pos)
+            .collect()
+    }
+
+    pub fn task_stands(&self, point: Pos, actor: i64) -> Vec<Pos> {
+        self.task_cells(point)
+            .into_iter()
+            .flat_map(|cell| self.interact_positions(cell, actor))
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect()
+    }
+
+    pub fn adjacent_task(&self, from: Pos, point: Pos) -> bool {
+        self.task_cells(point)
+            .into_iter()
+            .any(|cell| self.adjacent(from, cell))
+    }
+
     pub fn actor_at(&self, pos: Pos, actor: i64) -> bool {
         self.observation
             .team_our
@@ -85,3 +116,4 @@ fn occupies(role: &Role, pos: Pos, actor: i64) -> bool {
         && (pos.y == role.pos.y || pos.y == role.pos.y - NEIGHBOR_RANGE);
     footprint || role.pos == pos
 }
+use std::collections::BTreeSet;

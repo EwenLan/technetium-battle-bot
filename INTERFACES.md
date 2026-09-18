@@ -7,6 +7,8 @@
 
 当前源码入口为 `transport::serve(port)` → `runtime::Session::handle(&[u8]) -> Vec<u8>` → `protocol::decode/encode`、`world::World::apply`、`ai::decide`、`command::Arbiter::propose/finish`。`Session` 先持久化观测和上一轮合法性回执，再克隆 `DecisionState` 草稿；新动作仅在编码及截止检查后提交，并缓存同回合同请求结果。尚无正式的 `TurnStamp/OwnerPath`、generation 验证、ResourceCoordinator、层级输出/报告队列或 IF16 回放。当前 `Arbiter::accepted()` 仅向个体层提供本轮已选择动作，`individual::record_committed/reconcile` 用下一回合合法性回执形成 Step 报告；这里的 `ExecutionReport.owner` 暂为角色整数 ID，不是本文目标 `OwnerPath`，也不能把“合法”当作效果确认。现有 `WorldView` 是观测的只读查询封装，不等同于本文完整 WorldSnapshot。接口变更先对照此差距，逐段迁移，不能把目标签名写成已交付 API。
 
+本阶段 `WorldView::task_cells/task_stands/adjacent_task` 将同一任务点的多格 `zones` 合并为交互候选；目前仍采用相邻格交互的保守假设，正式站位语义待 U03 联调。
+
 | 接口组 | 第一阶段实现范围 |
 | --- | --- |
 | IF01–IF03 | JSON/HTTP、简化回合缓存与草稿提交；未完成正式事务代次、官方路由验证和日志 |

@@ -146,7 +146,7 @@ impl<'a> Arbiter<'a> {
             .any(|task| {
                 task.is_valid == Some(true)
                     && task.cold_down_rounds == Some(crate::rules::constants::NO_COOLDOWN)
-                    && self.view.adjacent(role.pos, task.task_position)
+                    && self.view.adjacent_task(role.pos, task.task_position)
             });
         role.role_type == "pioneer" && self.view.observation.phase_task.is_empty() && task_available
     }

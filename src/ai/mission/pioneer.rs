@@ -46,10 +46,10 @@ fn choose_action(
     }
     let view = WorldView::new(observation);
     let task = choose_task(observation, pioneer, &view)?;
-    if view.adjacent(pioneer.pos, task.task_position) {
+    if view.adjacent_task(pioneer.pos, task.task_position) {
         return Some(Action::AcceptTask);
     }
-    let stands = view.interact_positions(task.task_position, pioneer.id);
+    let stands = view.task_stands(task.task_position, pioneer.id);
     Some(Action::Move(
         next_step(&view, pioneer.id, pioneer.pos, &stands)?.next,
     ))
@@ -66,7 +66,7 @@ fn choose_task<'a>(
         .iter()
         .filter(|task| task.is_valid == Some(true) && task.cold_down_rounds == Some(NO_COOLDOWN))
         .filter_map(|task| {
-            let stands = view.interact_positions(task.task_position, pioneer.id);
+            let stands = view.task_stands(task.task_position, pioneer.id);
             let path = next_step(view, pioneer.id, pioneer.pos, &stands)?;
             let needed = CHALLENGE_SETUP_ROUNDS + ANSWER_MARGIN_ROUNDS + path.steps;
             task.timeout_rounds
