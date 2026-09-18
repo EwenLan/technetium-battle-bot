@@ -12,6 +12,7 @@ pub struct Arbiter<'a> {
     used_roles: BTreeSet<i64>,
     reserved_destinations: BTreeSet<crate::domain::Pos>,
     reserved_build_sites: BTreeSet<crate::domain::Pos>,
+    accepted: Vec<(i64, Action)>,
     remaining_gold: Option<i32>,
     build_mask: Option<&'a BuildMask>,
 }
@@ -24,6 +25,7 @@ impl<'a> Arbiter<'a> {
             used_roles: BTreeSet::new(),
             reserved_destinations: BTreeSet::new(),
             reserved_build_sites: BTreeSet::new(),
+            accepted: Vec::new(),
             remaining_gold: observation.team_our.gold_num,
             build_mask,
         }
@@ -35,8 +37,13 @@ impl<'a> Arbiter<'a> {
         }
         let key = actor.to_string();
         self.reserve(actor, &action);
+        self.accepted.push((actor, action.clone()));
         self.commands.insert(key, Command::from(action));
         true
+    }
+
+    pub fn accepted(&self) -> &[(i64, Action)] {
+        &self.accepted
     }
 
     pub fn finish(self) -> Response {

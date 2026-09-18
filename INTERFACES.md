@@ -5,14 +5,14 @@
 
 ## 1. 接口边界与实现方式
 
-当前源码入口为 `transport::serve(port)` → `runtime::Session::handle(&[u8]) -> Vec<u8>` → `protocol::decode/encode`、`world::World::apply`、`ai::decide`、`command::Arbiter::propose/finish`。`Session` 使用观测先更新、`DecisionState` 克隆草稿并在编码及截止检查后提交，缓存同回合同请求结果；但尚无正式的 `TurnStamp/OwnerPath`、generation 验证、ResourceCoordinator、层级输出/报告队列或 IF16 回放。现有 `WorldView` 是观测的只读查询封装，不等同于本文完整 WorldSnapshot。接口变更先对照此差距，逐段迁移，不能把目标签名写成已交付 API。
+当前源码入口为 `transport::serve(port)` → `runtime::Session::handle(&[u8]) -> Vec<u8>` → `protocol::decode/encode`、`world::World::apply`、`ai::decide`、`command::Arbiter::propose/finish`。`Session` 先持久化观测和上一轮合法性回执，再克隆 `DecisionState` 草稿；新动作仅在编码及截止检查后提交，并缓存同回合同请求结果。尚无正式的 `TurnStamp/OwnerPath`、generation 验证、ResourceCoordinator、层级输出/报告队列或 IF16 回放。当前 `Arbiter::accepted()` 仅向个体层提供本轮已选择动作，`individual::record_committed/reconcile` 用下一回合合法性回执形成 Step 报告；这里的 `ExecutionReport.owner` 暂为角色整数 ID，不是本文目标 `OwnerPath`，也不能把“合法”当作效果确认。现有 `WorldView` 是观测的只读查询封装，不等同于本文完整 WorldSnapshot。接口变更先对照此差距，逐段迁移，不能把目标签名写成已交付 API。
 
 | 接口组 | 第一阶段实现范围 |
 | --- | --- |
 | IF01–IF03 | JSON/HTTP、简化回合缓存与草稿提交；未完成正式事务代次、官方路由验证和日志 |
 | IF04–IF05 | 基础快照差分、记忆、几何/建造掩码、局部动作校验；无完整预测和规则服务 |
-| IF06–IF09 | 直接函数调用和少量状态记录；未实现层级消息、任务 DAG、个体转移契约 |
-| IF10–IF11 | 事件 enum 与状态 enum；无 inbox/路由/报告或通用 FSM 驱动 |
+| IF06–IF09 | 直接函数调用、提交后等待及回执报告的简化版；未实现层级消息、任务 DAG、完整个体转移契约 |
+| IF10–IF11 | 事件/状态 enum、有限的 Step 报告与类型化回执原因；无完整 inbox/路由或通用 FSM 驱动 |
 | IF12–IF14 | 本轮内角色、目标格、金币的基础预约与响应编码；其余资源/动作及回执未覆盖 |
 | IF15–IF16 | 单次 LLM prompt/下一回合答案；无完整作业、沙盒、SOP、遥测/回放 |
 

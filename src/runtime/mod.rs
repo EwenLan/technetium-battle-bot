@@ -1,6 +1,6 @@
 use std::time::{Duration, Instant};
 
-use crate::ai::{DecisionState, decide};
+use crate::ai::{DecisionState, decide, individual};
 use crate::protocol::{decode, empty_response, encode};
 use crate::rules::build::BuildMask;
 use crate::rules::constants::HTTP_DECISION_TIMEOUT_MS;
@@ -66,6 +66,7 @@ impl Session {
     fn next_round(&mut self, observation: crate::domain::Observation, key: String) -> Vec<u8> {
         let deadline = Instant::now() + Duration::from_millis(HTTP_DECISION_TIMEOUT_MS);
         self.world.apply(observation.clone());
+        self.decision.reports = individual::reconcile(&observation, &mut self.decision);
         let mut draft = self.decision.clone();
         let planned = decide(
             &observation,

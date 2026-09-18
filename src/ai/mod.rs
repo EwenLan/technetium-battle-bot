@@ -19,6 +19,8 @@ pub struct DecisionState {
     pub missions: BTreeMap<i64, MissionState>,
     pub tactics: BTreeMap<i64, TacticalState>,
     pub individuals: BTreeMap<i64, IndividualState>,
+    pub pending_actions: BTreeMap<i64, individual::PendingAction>,
+    pub reports: Vec<crate::event::ExecutionReport>,
     pub challenge: cognition::ChallengeMemory,
     pub emergency_clear: u8,
     pub build_plans: BTreeMap<i64, mission::BuildPlan>,
@@ -32,6 +34,8 @@ impl Default for DecisionState {
             missions: BTreeMap::new(),
             tactics: BTreeMap::new(),
             individuals: BTreeMap::new(),
+            pending_actions: BTreeMap::new(),
+            reports: Vec::new(),
             challenge: cognition::ChallengeMemory::default(),
             emergency_clear: crate::rules::constants::ZERO_COUNTER,
             build_plans: BTreeMap::new(),
@@ -55,6 +59,7 @@ pub fn decide(
     );
     let mut arbiter = Arbiter::new(observation, build_mask);
     mission::assign(observation, state, &mut arbiter, build_mask, deadline);
+    individual::record_committed(observation.round_no, arbiter.accepted(), state);
     let mut response = arbiter.finish();
     response.prompt = cognition::prepare_prompt(observation, &mut state.challenge);
     response

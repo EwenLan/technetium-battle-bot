@@ -39,11 +39,19 @@ pub enum ReportStatus {
     ResourceNeeded,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ReportReason {
+    OwnerDied,
+    ActionLegal,
+    ActionRejected,
+    ActionResultUnknown,
+}
+
 #[derive(Clone, Debug)]
 pub struct ExecutionReport {
     pub scope: ReportScope,
     pub status: ReportStatus,
-    pub owner: u64,
-    pub reason: &'static str,
+    pub owner: i64,
+    pub reason: ReportReason,
     pub observed_round: i32,
 }
