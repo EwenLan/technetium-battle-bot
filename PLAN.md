@@ -9,9 +9,10 @@
 - [x] 建立设计、交接、上下文、决策和本计划，并更新 `AGENTS.md` 文档导航。
 - [x] 细化各层实现工作、状态行为/转移表、事件与上报目录、挑战/宝藏子流程及必测轨迹。
 - [x] 建立 INTERFACES 的 IF01–IF16 接口契约、类型/所有权/事务规则及 API01–API15 待实现验收规格。
+- [x] 建立 BEHAVIOR：78 个状态处理规格、三角色/三武器规则、A01–A12 算法、G01–G16 守卫、数值算例及 BH01–BH18 待实现验收。
 - [ ] 实现可运行的比赛服务与 AI。
 
-实现以 [DESIGN.md](DESIGN.md) 为架构基线，以 [INTERFACES.md](INTERFACES.md) 为模块契约基线；重大调整先更新 [DECISION.md](DECISION.md)。每阶段交付可评审的小步改动，更新 [HANDOFF.md](HANDOFF.md) 的进度、已验证内容和下一步。本轮不新增依赖、业务代码或启动脚本。
+实现以 [DESIGN.md](DESIGN.md) 为架构基线，以 [INTERFACES.md](INTERFACES.md) 为模块契约基线，以 [BEHAVIOR.md](BEHAVIOR.md) 为逐状态算法基线；重大调整先更新 [DECISION.md](DECISION.md)。每阶段交付可评审的小步改动，更新 [HANDOFF.md](HANDOFF.md) 的进度、已验证内容和下一步。本轮不新增依赖、业务代码或启动脚本。
 
 ## 2. 阶段与验收
 
@@ -139,3 +140,32 @@
 状态机逐项验收采用 DESIGN 11.1 的 FSM01–FSM16 轨迹：每条转移检查 guard 正/反例、重复事件、取消/死亡/超时优先级，核对状态、输出建议、资源释放和上报作用域；这些验收目前均未执行。
 
 模块接缝采用 INTERFACES 第 15 节的 API01–API15，重点检查真实观测不可回滚、批准租约与分配握手、完整父链取消、编码前验证及旧结果隔离；契约测试与业务代码分文件，目前尚未实现。
+
+## 4. 可直接开始编码的行为工作包
+
+这些工作包细化 P0–P7，不另开一条跳过协议和规则确认的路线。顺序由依赖决定；所有路径是未来目标，不表示文件已经存在。每包先准备固定输入/预期输出，再实现纯计算和 FSM handler，最后接入 runtime 与回放。状态处理器按状态族拆文件，不能把 78 个状态放入一个巨型函数。
+
+| 工作包/阶段 | 依赖 | 实现位置与具体交付 | 验收门槛 |
+| --- | --- | --- | --- |
+| B01 参数与角色 / P0–P2 | P0规则资料、P1值类型 | `rules/constants.rs`、`decision/policy/`、`domain/roles.rs`；区分R/P/U，校验配置，稳定W1/W2/P；实现 INTERFACES 2.4 值对象 | BH05；未知规则不补零；角色ID换阵营仍正确；记录配置版本 |
+| B02 统一守卫与世界 / P2 | B01、P1事务 | `fsm/`、`world/lifecycle/`；A01/A02/A12、W四态、完整OwnerPath、分阶段预算、TransitionRuleId/BehaviorTrace | BH01的W部分、BH02；每条边正反例、同轮多事件优先级、重复请求不推进 |
+| B03 几何与风险 / P2–P3 | B01、B02、世界实体索引 | `rules/geometry/`、`ai/tactics/navigation/`、`decision/risk/`；A03/A11、风险向上取整、ETA、稳定A*、stall和目标级重试计数 | BH03/BH04/BH12；返防等号、角色risk819、两次真实阻塞、预算不足Incomplete |
+| B04 动作与个体 / P3 | B02、B03、IF12–IF14 | `command/tracker/`、`ai/individual/states/`；A10、I七态；提交回执、效果确认、消费Unknown和失效清理 | BH01的I部分、BH11；本地未选中不等待，死亡后旧效果可对账 |
+| B05 候选与任务 / P3 | B01–B04 | `ai/mission/candidates/`、`assignment/`、`states/`；A04/A05、M十态、DAG、资源批准握手、分数分项和稳定并列规则 | BH01的M部分、BH06/BH07；金币25冲突、采售周期完整、失败不是无限新建任务 |
+| B06 战术与建设 / P3 | B03–B05；建造依赖U01 | `ai/tactics/states/`、`ai/mission/construction/`；T十一态、A06、交互站位、工程/采购/升级/修复节点 | BH01的T部分、BH08/BH13；Hold可唤醒、普通Blocked放人、挑战不自动离开、出口可达 |
+| B07 战略与防守 / P4 | B05/B06；弹道依赖U06 | `ai/strategy/states/`、`ai/tactics/defense/`、`fire/`；S七态、A07/A09、返防匹配、联合火力、Emergency滞回、Endgame | BH01的S部分、BH03/BH04/BH09/BH10；完整昼夜、补药占槽、冷却Unknown、最终回合动作 |
+| B08 挑战与作业 / P5 | B02/B04–B07、IF15 | `ai/mission/challenge/`、`cognition/jobs/`、`sop/`；A08、C十四态/J八态；NextStep、部分答案、任务取消/通道墓碑 | BH01的C/J部分、BH14/BH15；Sent收结果不丢、未知期限策略、工人并行执行、重试有上限 |
+| B09 新闻与宝藏 / P6 | B05/B08 | `cognition/news/`、`treasure/`；N六态/B十一态、证据分级、相对日期、个人物品多重集、全场尝试上限 | BH01的N/B部分、BH16/BH17；独立线索、码2歧义、已空撤销所有候选、失败消费不退款 |
+| B10 集成与调优 / P7 | B01–B09 | `tests/fixtures/behavior/`、独立行为/轨迹测试、回放报告；覆盖所有允许边与关键跨层链，参数变化同样本比较 | BH01–BH18及FSM/API全矩阵；固定工作预算确定性、双方阵营、1300轮、官方环境性能测量 |
+
+- [ ] B01–B03：配置、守卫、世界、风险和寻路已实现并验证。
+- [ ] B04–B06：个体、任务、战术及白天经济闭环已实现并验证。
+- [ ] B07：角色返防和三炮联合防守已实现并验证。
+- [ ] B08–B09：挑战、认知、新闻和宝藏闭环已实现并验证。
+- [ ] B10：状态/接口/行为验收与实战回放通过，默认参数有测量依据。
+
+每个状态的最低测试集：正常进入与输出、每条允许边的 guard true/false/Unknown、等待解除或终态幂等、取消/期限/死亡（适用时）、本地拒绝与实际提交（适用时）。全局边可共享参数化 fixture，但不能只测正常路径。每条轨迹检查状态、动作/作业、资源、上报和证据五类结果，不以文本日志包含状态名代替行为断言。
+
+预期逐轮轨迹至少覆盖：工人建炮→采售→返防→开火→清晨恢复；控制者死亡→替补→实际复活再派遣；P接题→工具→有证据答案→结束/SOP；P紧急离场→旧LLM结果隔离；传闻→采购→等窗口→失败消费→有新证据才再评估。使用 BEHAVIOR 第 9 节算例建立小 fixture，再组合成长轨迹。
+
+实现包完成后执行 AGENTS 检查并提交/推送，更新 PLAN 完成项、HANDOFF 结果、AGENT_CONTEXT 事实；参数/边/接口变化同步 BEHAVIOR、DESIGN、INTERFACES 和 DECISION。当前上述工作包和 BH 测试均尚未实现，文档核查不算功能验收。

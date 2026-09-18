@@ -5,7 +5,7 @@
 
 实现细节导航：世界模型的工作/状态见 4.4–4.5；四层 FSM 的状态行为与完整转移表见第 6 节；事件字段、生产者、消费者及上报处理见第 7 节；挑战、认知作业与宝藏子状态机见 10.3–10.5；必须验证的状态切换场景见 11.1。
 
-模块/层级的函数签名、类型字段、所有权、版本、错误和提交时序统一定义在 [INTERFACES.md](INTERFACES.md)。本文维护行为与算法，接口文档维护调用契约；改变其中一方时同步另一方，避免重复定义同名结构。
+模块/层级的函数签名、类型字段、所有权、版本、错误和提交时序统一定义在 [INTERFACES.md](INTERFACES.md)。逐状态的计算、动作选择、角色职责和参数统一细化在 [BEHAVIOR.md](BEHAVIOR.md)：A01–A12 是算法，G01–G16 是守卫，第 5–8 节覆盖全部 78 个状态，第 9 节给出切换记录与数值用例。本文维护架构和状态拓扑，BEHAVIOR 维护可实现行为，INTERFACES 维护调用契约；变更时同步关联内容。
 
 ## 1. 目标与比赛约束
 
@@ -237,6 +237,7 @@ flowchart TD
 | `DayDevelop → PrepareNight` | `DuskApproaching` 或 tick 检查返防窗口到达 | 发布返防截止与受限任务准入 |
 | `DayDevelop/PrepareNight → NightDefend` | `NightStarted` 或观测已经入夜 | 禁止建造/白天行为，激活驻防；不能依赖曾收到黄昏事件 |
 | `NightDefend/PrepareNight → DayDevelop` | `DayStarted` 且非终盘、无紧急条件 | 清理前一夜战术目标，恢复发展；支持跨回合跳跃 |
+| `PrepareNight → DayDevelop` | 仍在白天且必要防守目标已正式撤销，不再有返防需求 | 重算短期工作；不能因 ETA 的小幅变化反复切换 |
 | `Bootstrap/DayDevelop/PrepareNight/NightDefend/Endgame → Emergency` | `ThreatRaised` 或 `ReportRaised(AtRisk)`，且风险模型/最低防守缺口满足紧急 guard | 抢占低优先任务；报告本身不能绕过 guard |
 | `Emergency → select_normal_phase` | 风险连续达到稳定恢复条件且关键缺口已解决 | 发新版本指令，重新审核旧任务 |
 | 任一非结束、非紧急态 `→ Endgame` | `EndgameWindowOpened`；剩余回合不足既定长期投资回收窗口 | 减少长期预算；紧急态只更新终盘标记，恢复后进入终盘 |
@@ -308,6 +309,7 @@ stateDiagram-v2
 | `Construct` | 确认合法地块/建筑上限 → 预约金币或工人石头 → 到施工格 → `build` → 验证建筑 | 目标格出现己方对应建筑；入夜取消未提交施工建议；覆盖旧武器必须是授权替换任务 |
 | `Upgrade` | 检查目标等级 → 有券则跳过购买，否则到商店购买 → 到建筑旁 → `use` → 验证等级/回血 | 目标等级变化及用品变化；目标毁坏则失败；已有正确券可复用，不能假设角色间能转移背包 |
 | `RepairOrHeal` | 选择合法修复包/药剂或另建升级任务 → 必要时采购 → 到有效位置 → 使用 | 目标生命恢复与用品消耗；角色已死不能用药，已毁建筑不能修复 |
+| `Escape` | 基于 BEHAVIOR A11 选择可达安全区域 → 预约角色/路径 → 有界撤退 → 每轮重评风险 | 实际到达目标区域且风险低于退出阈值才完成；原任务取消后以新 owner 授权，不能复用失效挑战/采矿意图 |
 | `DefendSector` | 匹配武器/角色 → 返防 → 占操作位 → 持续火力循环 → 清晨释放本夜任务 | 目标是防守指定时间窗，清晨且满足约定即完成；一轮攻击成功只是进展 |
 | `Resupply` | 计算个人背包空位 → 购买清单 → 回到指定地点 | 指定角色持有所需物品并到位；无交易/转交动作，不设计角色互相交货 |
 | `Challenge` | 到己方任务邻域 → 接取确认 → 持续守位 → 求解/提交/修正 → 观察任务结束 | 完整子 FSM 见 10.3；离开/死亡不可挂起后续接，结束原因不明时不宣称全对 |
@@ -326,7 +328,7 @@ stateDiagram-v2
 | `Position` | 分配具体交互格或操作位，解决队友争位和操控者配对 | 到位后锁定必要租约，发 `GoalReached(kind=Position, scope=Step)` |
 | `Execute` | 提供合法技能/攻击意图；火力计划每回合按当前敌情重算 | 等待本次动作真正被提交；候选被淘汰不能假装进入效果评估 |
 | `Evaluate` | 消费本计划关联的回执/效果，更新局部目标和剩余工作 | 一步完成发进展；整个局部目标完成才发完成报告 |
-| `Replan` | 使旧路径/候选失效，增加重试计数；更换路线/站位/目标 | 释放旧短期预约，保留任务级必要租约；超过上限报告阻塞 |
+| `Replan` | 使旧路径/候选失效；失败引发的重规划增加 `(mission,target)` 重试计数，正常节点推进不计失败；更换路线/站位/目标 | 释放旧短期预约，保留任务级必要租约；超过上限报告阻塞 |
 | `Hold` | 等待冷却、开放时间、拥堵消退或认知结果；每回合检查安全与截止 | 通常不发动作；明确 `wait_reason/wakeup/deadline`，不能无期限自循环 |
 | `Retreat` | 计算安全可达站位，提出逃生移动或已授权补给意图 | 发 `AtRisk/Retreating`；涉及挑战任务时先通知其即将放弃 |
 | `Completed` | 保存局部目标证据，报告父任务 | 释放计划租约；父任务决定是否完成或创建下一局部计划 |
@@ -338,7 +340,7 @@ stateDiagram-v2
 | `Plan/Replan → Approach` | `PlanReady`，存在可行方案且不在目标邻域 |
 | `Plan/Replan/Approach → Position` | `PlanReady/GoalReached` 或 tick，已在邻域，统一进入精确站位复验（已经到位也允许） |
 | `Position → Execute` | tick，角色实际到位、控制者/资源有效、当前动作可执行 |
-| `Position/Execute/Evaluate → Hold` | 武器冷却、暂无目标、等待开放/认知等暂时条件，且等待仍安全/有价值 |
+| `Approach/Position/Execute/Evaluate/Retreat → Hold` | 暂时占格、武器冷却、暂无目标、等待开放/认知，或暂时无更安全逃生步骤；等待有明确唤醒条件和截止 |
 | `Plan/Replan → Hold` | 暂无可行路线/站位但存在明确可等待条件与截止；否则失败上报 |
 | `Execute → Evaluate` | `ActionCommitted`，至少一条本计划动作已经进入最终响应；多角色计划按 action ID 分别跟踪 |
 | `Evaluate → Execute` | 回执已对账，局部目标仍有效且下一步能执行，例如下一轮射击 |
@@ -473,6 +475,7 @@ stateDiagram-v2
 | `Completed / GoalSatisfied` | 对应 scope 的目标谓词满足，附完成回合 | 父层自行复验；Step 完成只推进步骤，Mission 完成才清理任务并唤醒依赖 |
 | `Blocked / PathObstructed` | 连续无进展或有可靠不可达证据 | T 优先绕行；重试耗尽才让 M 重新分配/换目标 |
 | `Blocked / TargetUnavailable` | 矿点消失、目标移动或交互条件暂失 | 检查是否有替代；永久消失且无替代则 Failed |
+| `Blocked / Capacity` | 个人背包放不下已计划物品，且无获准出售/丢弃方案 | 取消低优先采购或重排工作；不能借用其他角色背包容量 |
 | `Blocked / WaitingCooldown/WaitingResult` | 正常等待预计超过任务容忍时间 | 更新 ETA 和守位成本；普通短等待只记 Progress，不刷屏 |
 | `ResourceNeeded / Gold/Item/Controller/StandCell` | 完成目标存在明确资源缺口 | M 先调配/创建前置任务，无法解决再向 S 请求预算；附数量和最迟需求时间 |
 | `AtRisk / DefenseLate/BaseThreatened` | ETA 超截止或基地风险超阈值 | M 重派；仍有缺口再报 S，由风险 guard 决定 Emergency |
@@ -645,9 +648,9 @@ stateDiagram-v2
 
 | 状态 | 行为及下一状态 |
 | --- | --- |
-| `Collect` | 按发布日/频道存原文和证据 ID；有新数据进入 Extract，无变化不创建重复流程 |
+| `Collect` | 按发布日/频道存原文和证据 ID；有新数据进入 Extract，无变化不创建重复流程；无内容条目进入 Rejected |
 | `Extract` | 尝试本地结构化或调度认知作业；结果返回后进入 Validate；没有额度则 Deferred |
-| `Validate` | 核对矿种、相对日期、停工区间和原文证据；有效进入 Publish，矛盾/无证据进入 Rejected |
+| `Validate` | 核对矿种、相对日期、停工区间和原文证据；有效进入 Publish，可补的上下文缺失进入 Deferred，矛盾/伪证据进入 Rejected |
 | `Publish` | 发布带有效期的 `HypothesisUpdated`，只更新预测；终态 |
 | `Deferred` | 等待额度重置或新的必要线索；仍有价值则回 Extract，过期进入 Rejected |
 | `Rejected` | 留原文与失败原因；本流程终态，未来新证据创建新版本而非覆盖旧记录 |
@@ -658,12 +661,12 @@ stateDiagram-v2
 | --- | --- | --- |
 | `CollectClues` | 聚合各日传闻，不移动开拓者；请求有价值的信息提取 | 新线索/`HypothesisUpdated` → `Infer` |
 | `Infer` | 维护位置、开放时间、用品多重集候选及矛盾 | 有候选 → `Validate`；信息不足 → `CollectClues` |
-| `Validate` | 检查证据、置信度、预算与返防成本 | 可兑现收益足够 → `AcquireSupplies`；不足 → `CollectClues`；已知宝藏耗尽 → `Abandoned` |
-| `AcquireSupplies` | 派生仅供开拓者使用的采购任务；已有准确物品则跳过采购 | 背包满足 → `Travel`；商品/资金不可得且无解 → `Abandoned`，暂缺则父任务 Blocked |
+| `Validate` | 检查证据、置信度、预算与返防成本 | 可兑现收益足够 → `AcquireSupplies`；缺证据 → `CollectClues`；需改候选 → `Reassess`；耗尽/无可行预算或窗口 → `Abandoned` |
+| `AcquireSupplies` | 派生仅供开拓者使用的采购任务；已有准确物品则跳过采购 | 背包满足 → `Travel`；价格/容量/窗口改变 → `Reassess`；商品/资金不可得且无解 → `Abandoned`，暂缺则父任务 Blocked |
 | `Travel` | 到候选祭坛一格内的可站立位置 | 实际到位且未开放 → `WaitWindow`；条件已满足 → `Summon`；风险/路径变化 → `Reassess` |
 | `WaitWindow` | 保持安全站位，检查开放预测和返防期限，不反复献祭试时间 | 开放条件满足 → `Summon`；窗口不再可行/有冲突证据 → `Reassess` |
-| `Summon` | 构造准确用品多重集和单一目标建议 | 动作提交 → `AwaitResult`；未提交保持本态 |
-| `AwaitResult` | 按 action ID 对账结果码及背包 | 码 1 → `Completed`；码 4 → `Abandoned`；码 0/2/3 或结果未知 → `Reassess` |
+| `Summon` | 构造准确用品多重集和单一目标建议 | 动作提交 → `AwaitResult`；条件变化 → `Reassess`；未提交且条件有效保持本态 |
+| `AwaitResult` | 按 action ID 对账结果码及背包 | 码 1 → `Completed`；码 4 → `Abandoned`；码 2/3 → `Reassess`；码 0/无结果先等对账宽限，仍未知 → `Reassess(Unknown)` |
 | `Reassess` | 对账已消耗用品；码 2 保留位置/时间两种可能，码 3 重查用品；禁止无变化重复消费 | 新证据仍值得投入 → `Validate`；信息不足 → `CollectClues` 并释放角色；无可行机会 → `Abandoned` |
 | `Completed` | 保存成功证据和奖励观测，取消同场其他探索候选 | 终态 |
 | `Abandoned` | 记录耗尽、风险、预算或取消原因，释放角色/用品预约 | 终态；新信息只允许在宝藏未确认耗尽时创建新流程 |

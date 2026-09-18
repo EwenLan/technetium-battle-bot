@@ -1,6 +1,6 @@
 # 模块与层级接口契约
 
-> 更新：2026-09-19。状态：待实现的内部接口基线。本文定义数据字段、调用方向、所有权、错误和时序；[DESIGN.md](DESIGN.md) 定义算法与 FSM 行为。Rust 签名为契约示意，辅助类型由表格定义，不表示已有可编译实现。
+> 更新：2026-09-19。状态：待实现的内部接口基线。本文定义数据字段、调用方向、所有权、错误和时序；[DESIGN.md](DESIGN.md) 定义架构和 FSM 拓扑，[BEHAVIOR.md](BEHAVIOR.md) 定义逐状态算法与策略参数。Rust 签名为契约示意，辅助类型由表格定义，不表示已有可编译实现。
 > 官方 JSON 仍以 `docs/docs/接口文档.md` 为准。本文中的 ID、版本和事件字段是内部元数据，不能擅自加入比赛响应。
 
 ## 1. 接口边界与实现方式
@@ -104,6 +104,37 @@ struct LayerOutput<T> {
 `TurnContext` 所有引用仅在当前同步调用有效，不能存进跨回合记忆或跨 `await` 持有。world 只公开只读实体视图；各层只可修改自己的草稿记忆。预约账本只有 IF12 的 ResourceCoordinator 可写；任务层的 LeaseManager 是申请/释放策略，不是第二个账本写入者。
 
 `LayerResult<T> = Result<LayerOutput<T>, LayerError>`。无可行候选是正常输出（空集合或类型化阻塞原因），不是异常。预算耗尽返回已完成的有界候选并标记 `Partial/BudgetExhausted`；不能返回未经校验的半成品。每次预算检查、候选上限和诊断集合上限都来自配置。
+
+### 2.4 行为算法的输入、结果和诊断契约
+
+下列值对象供 IF06–IF11 使用；算法编号、排序和默认参数以 BEHAVIOR 为准，不能由不同层各算一份不同口径。只有正式规则属于 RuleSet，策略初值属于 PolicyConfig。
+
+| 类型/所属模块 | 必要字段与约束 |
+| --- | --- |
+| `PolicyConfig` / decision | config_version、时间/风险/经济/火力/认知/证据参数、开关、容量；BEHAVIOR 第 1 节和 8.3 为初始值；验证 enter>exit、有限预算、正分母、风险/质量在统一刻度内 |
+| `RoleRoster` / domain | W1/W2/P 到 EntityId/RoleKind 的映射、初始化依据；W1/W2 标签按身份稳定；工种来自真实类型，不从 ID 数值猜测 |
+| `BehaviorMetrics` / decision | stamp、base_risk、按角色 risk、必要防守数、required_ready_eta、next_night、endgame标记、所有估计来源/不确定性；值可为 Unknown |
+| `CandidateEstimate` / domain | candidate_key、goal、priority_class、assignee组合、可行站位、path_steps、work_rounds、return_steps、setup_rounds、所需资源、expected_points/net_gold/defense_gain/risk/switch_cost、score分子分母、证据和预测标记 |
+| `WakeCondition` / domain | `CooldownZero(weapon)/ResourceGranted(request)/JobSettled(job)/WindowOpened(window)/CellCleared(pos)/TargetAvailable(target)/EvidenceAdded(scope)`；配套 deadline、resume_reason、recheck_round；不得存任意闭包或自由字符串 |
+| `ProgressCounters` / 各实例私有 | owner/target键、stall、失败重规划次数、认知step重试、最后真实进展回合、稳定新帧数；终场宝藏尝试由会话统计持有，不能靠新任务清零 |
+| `TransitionRuleId` / domain | machine_kind、from_state、trigger_class、guard_id、to_state、必要的符号后缀；编译期登记且跨文件移动稳定，重放按规则/配置版本解释 |
+| `GuardEvaluation` / domain | guard_id、Verdict(True/False/Unknown)、类型化输入分项、EvidenceRef、reason；Unknown 不能隐式转换 true |
+| `BehaviorTrace` / domain | stamp、owner、rule_id、from/to、cause、GuardEvaluation、预算计数、租约请求/释放、proposal/action/job关联；有容量上限，日志失败不影响动作合法性 |
+
+`PolicyConfig` 不是任意参数字典：按职责拆成有构造校验的子配置。CandidateEstimate 的时间均为相对当前 round 的回合数，ready_eta/deadline 是绝对 Round；资源数量和 gain 的正负使用不同类型，负效用不能溢出成大正数。风险是预测而不是伤害事实，证据质量是分级而不是概率；成功率估计必须另有来源/先验标记。
+
+内部计算边界示意：
+
+```rust
+fn evaluate_metrics(ctx: &TurnContext<'_>, roster: &RoleRoster,
+    budget: &mut TurnBudget) -> LayerResult<BehaviorMetrics>;
+fn estimate_candidate(spec: &MissionSpec, metrics: &BehaviorMetrics,
+    ctx: &TurnContext<'_>, budget: &mut TurnBudget)
+    -> Result<CandidateEstimate, CandidateRejection>;
+fn evaluate_guard(id: GuardId, inputs: &GuardInputs) -> GuardEvaluation;
+```
+
+`evaluate_metrics` 的空间/威胁计算由 world 查询与规则算法提供，战略聚合结果；`estimate_candidate` 归 mission，路径/火力估计由 tactics 规划服务提供纯查询；`evaluate_guard` 归对应 FSM 的规则组，共用时钟/owner/生命检查可复用。GuardInputs 是当前 machine 所需字段的类型化集合，不允许通过它持有其他层可变状态。CandidateRejection 区分 `RuleUnknown/Capability/Deadline/Unreachable/Resource/NoPositiveGain/Budget`，可暂缓不等于 MissionFailed。
 
 ## 3. IF01：HTTP 与协议适配
 
@@ -247,8 +278,8 @@ fn apply_grants(&mut self, grants: &LeaseResolution,
 | `AssignmentCandidate` | `mission、assignees、score、atomic_lease_group`；人选只能是当前可派遣角色 |
 | `MissionDispatch` | `assignments: Vec<MissionAssignment>、cancellations: Vec<CancelScope>、cognitive_requests` |
 | `MissionAssignment` | `mission_spec、assignees、granted_lease_ids、checkpoint、directive_version、stamp`；只在必要预约全部成功后产生 |
-| `GoalPredicate` | 类型化目标，如 `AtRegion/InventoryAtLeast/BuildingPresent/BuildingLevel/DefenseWindow/ChallengeOutcome/TreasureOpened/AllOf`；评估结果 `Satisfied(evidence)/Pending/Impossible/Unknown` |
-| `MissionKind` | DESIGN 6.2.1 的 GatherAndSell/Construct/Upgrade/RepairOrHeal/DefendSector/Resupply/Challenge/Treasure/PressureOpponent/ClearOrDrop；每种携带其目标、数量或窗口参数 |
+| `GoalPredicate` | 类型化目标，如 `AtRegion/RiskBelow/InventoryAtLeast/BuildingPresent/BuildingLevel/DefenseWindow/ChallengeOutcome/TreasureOpened/AllOf`；RiskBelow 携带对象、阈值和策略版本，读取当前风险评估；结果 `Satisfied(evidence)/Pending/Impossible/Unknown`，证据保留观测/推断类别 |
+| `MissionKind` | DESIGN 6.2.1 的 GatherAndSell/Construct/Upgrade/RepairOrHeal/Escape/DefendSector/Resupply/Challenge/Treasure/PressureOpponent/ClearOrDrop；每种携带其目标、数量或窗口参数；Escape 用新 owner 承载旧任务取消后的逃生授权 |
 
 runtime 在 propose 与 apply_grants 之间调用 IF12；同轮同阶段的这两个方法共同消耗一次下行 FSM 转移额度，不把方法次数当成额外状态跳转权限。apply_grants 只能使用已授予的候选，不能临时换人/加预算。战术接受后返回 `MissionActivated`，失败则给出类型化拒绝报告，任务层回收未使用租约。
 
@@ -378,14 +409,14 @@ fn apply_transition<S, E>(node: &mut StateNode<S>,
 | 数据 | 字段/语义 |
 | --- | --- |
 | `StateNode<S>` | 当前 state、generation、entered_round、last_progress_round、retry_count、deadline、resume_hint、lease_refs |
-| `TransitionDecision<S,E>` | `Stay{effects}` 或 `Move{from_generation,to,guard_id,cause,evidence,exit_effects,enter_effects}` |
+| `TransitionDecision<S,E>` | `Stay{effects}` 或 `Move{from_generation,to,rule_id,guard_id,cause,evidence,exit_effects,enter_effects}`；rule_id 关联 BEHAVIOR 的具体允许边 |
 | `TransitionEffects<E>` | 本层类型化意图/上报/释放请求与转移轨迹，不包含已发送游戏动作 |
 | `TransitionBudget` | 当前回合各阶段已用次数、紧急重规划是否已用；由 runtime 创建，组件不可重置 |
 | `FsmError` | `StaleGeneration/IllegalTransition/TerminalState/TransitionLimit/InvariantViolation` |
 
 apply_transition 先检查当前代次与合法边，再按 `on_exit → 释放/转移请求 → on_enter` 的顺序产生效果并更新本层草稿。租约释放是请求，由 IF12 实施，不允许共享驱动器越权写账本。TransitionLimit 保留已保存输入等待后续 tick；死亡/终止仍由硬约束层抑制所有新动作。
 
-返回 TransitionEffects 后，调用者还需按阶段提交它们，不能因为已计算 enter_effects 就把未获准预约写成已持有。guard 标识和原因进入回放，方便定位具体切换。
+返回 TransitionEffects 后，调用者还需按阶段提交它们，不能因为已计算 enter_effects 就把未获准预约写成已持有。输出第 2.4 节 BehaviorTrace，记录具体规则、guard 输入和原因，方便定位具体切换。A01 的守卫优先级和全局边先于状态内普通边；具体处理器不得另设一套优先级。
 
 ## 10. IF12：资源预约与生命周期
 

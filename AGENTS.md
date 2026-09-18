@@ -19,6 +19,7 @@ There is currently no dedicated test or asset directory.
 | 文档 | 用途与更新时机 |
 | --- | --- |
 | [DESIGN.md](DESIGN.md) | 项目结构、分层 AI、FSM、事件/上报、世界模型、算法与接口契约；架构变化时更新。 |
+| [BEHAVIOR.md](BEHAVIOR.md) | 78 个状态的处理规则、角色分工、A01–A12 算法、G01–G16 守卫、策略参数与 BH 验收用例；行为或阈值改变时更新。 |
 | [INTERFACES.md](INTERFACES.md) | 模块/层级的函数签名、数据结构、所有权、版本、错误与提交时序；公共契约变化时同步生产者、消费者和契约测试。 |
 | [HANDOFF.md](HANDOFF.md) | Agent 快速交接：当前实现状态、检查结果、限制和下一步；每次阶段交接时更新。 |
 | [PLAN.md](PLAN.md) | 实施阶段、依赖、待办与验收条件；仅按实际完成和验证结果勾选。 |
@@ -90,6 +91,7 @@ Pull requests should explain the behavior change, link applicable issues or spec
 功能变更涉及模块结构、分层职责、公共接口、FSM 状态/转移、事件/上报、世界模型、规则或运行时约定时，必须在同一次变更中更新相关辅助文档，并与代码一起提交：
 
 - `DESIGN.md`：更新最终架构、接口、状态表和规则约束，避免保留已失效的设计描述。
+- `BEHAVIOR.md`：同步逐状态算法、角色策略、切换条件、参数及数值算例；区分官方规则、策略初值和未确认行为。
 - `INTERFACES.md`：更新跨模块契约、字段、调用方向与错误语义，避免与实现或 DESIGN 的行为约束不一致。
 - `DECISION.md`：记录重大选择、理由、代价和替代关系；保留历史决策。
 - `PLAN.md`：同步实现步骤、依赖与验收状态，仅勾选实际完成事项。
