@@ -2,17 +2,19 @@
 
 ## Project Structure & Module Organization
 
-This repository contains `technetium-battle-bot`, a Rust 2024 binary for the “未来战争” competition. It currently has no dependencies, and `src/main.rs` only prints a greeting; the bot and HTTP server are not implemented yet.
+This repository contains `technetium-battle-bot`, a Rust 2024 binary for the “未来战争” competition. A first playable slice now parses requests, maintains a session/world snapshot, chooses basic actions, and serves HTTP. It uses `serde` and `serde_json`; the full architecture in DESIGN is still in progress.
 
 - `Cargo.toml`: package metadata and dependencies.
-- `src/`: Rust source. Add focused modules here as protocol handling and strategy develop.
+- `src/`: `transport`, `protocol`, `runtime`, `domain`, `rules`, `world`, `event`, `fsm`, `ai`, and `command` modules.
+- `tests/` and `tests/fixtures/`: isolated Rust integration tests and valid, focused JSON fixtures.
+- `run.sh`: release-build and competition server entry point (`bash run.sh <port>`).
 - `docs/docs/任务书.md`: game rules and competition requirements.
 - `docs/docs/接口文档.md`: HTTP integration and request/response schema.
 - `docs/docs/request.txt` and `response.txt`: protocol examples.
 - `docs/Demo/CoreGeek.tar.gz`: supplied demo archive.
 - `target/`: generated Cargo output, ignored by Git.
 
-There is currently no dedicated test or asset directory.
+The optional `BOT_BUILD_MASK_PATH` points to a verified JSON weapon-site mask; without one, automatic construction stays disabled. The test mask in `tests/fixtures/` is synthetic and must not be treated as an official map.
 
 ## 项目文档导航与维护
 
@@ -26,16 +28,17 @@ There is currently no dedicated test or asset directory.
 | [AGENT_CONTEXT.md](AGENT_CONTEXT.md) | 开发中大模型交互形成的需求、事实、证据和上下文摘要；新增约束或工作结束时更新。 |
 | [DECISION.md](DECISION.md) | 重大方案选择、依据、代价及重新评估条件；决策改变时保留历史并追加替代记录。 |
 
-开始工作先读 `HANDOFF.md` 和 `AGENT_CONTEXT.md`，再查阅对应设计与计划。当前框架仅完成设计，文档中的目标目录、接口示意和性能目标不代表已经实现或测量。规则未决项统一维护在 `DESIGN.md`，不要把 Demo 假设写成正式规则。开发上下文与比赛运行时的 LLM/SOP 记忆分开管理。
+开始工作先读 `HANDOFF.md` 和 `AGENT_CONTEXT.md`，再查阅对应设计与计划。当前已有可运行的第一阶段代码，但设计文档中多数状态、接口和性能目标仍未实现或测量；以 HANDOFF 的进度清单为准。规则未决项统一维护在 `DESIGN.md`，不要把 Demo 假设写成正式规则。开发上下文与比赛运行时的 LLM/SOP 记忆分开管理。
 
 ## Build, Test, and Development Commands
 
 Use a Rust toolchain supporting edition 2024. Run commands from the repository root:
 
 - `cargo build`: compile a debug binary.
-- `cargo run`: run the current entry point.
+- `cargo run -- <port>`: start the local HTTP server.
+- `bash run.sh <port>`: locked release build, then launch the competition server.
 - `cargo build --release`: build the optimized binary in `target/release/`.
-- `cargo test`: run Rust tests; none are currently defined.
+- `cargo test --all-targets`: run protocol, rules, arbitration, and runtime tests.
 - `cargo fmt --check`: check formatting with rustfmt.
 - `cargo clippy --all-targets -- -D warnings`: lint and reject warnings.
 
@@ -70,7 +73,7 @@ Follow rustfmt defaults, including four-space indentation. Use `snake_case` for 
 
 ## Testing Guidelines
 
-Use Rust’s built-in `#[test]` framework. 单元测试放在独立文件，例如业务实现为 `src/world/mod.rs`，测试实现为 `src/world/tests.rs`，业务文件只保留 `#[cfg(test)] mod tests;` 声明。集成测试放在 `tests/`，测试数据放在 `tests/fixtures/`；不在业务文件内写 `#[cfg(test)] mod tests { ... }`。
+Use Rust’s built-in `#[test]` framework. 单元测试放在独立文件，例如业务实现为 `src/world/mod.rs`，测试实现为 `src/world/tests.rs`，业务文件只保留 `#[cfg(test)] mod tests;` 声明。当前集成测试放在 `tests/`，数据放在 `tests/fixtures/`；不在业务文件内写 `#[cfg(test)] mod tests { ... }`。
 
 Name tests after behavior, for example `rejects_out_of_bounds_move`. Cover parsing, command serialization, and game-rule boundaries when adding those features. 验证可观察行为、错误路径与边界，缺陷修复添加能复现该问题的回归测试；测试须确定、独立，不依赖执行顺序或真实外部服务。No coverage threshold is configured.
 

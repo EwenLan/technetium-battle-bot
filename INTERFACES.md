@@ -1,9 +1,20 @@
 # 模块与层级接口契约
 
-> 更新：2026-09-19。状态：待实现的内部接口基线。本文定义数据字段、调用方向、所有权、错误和时序；[DESIGN.md](DESIGN.md) 定义架构和 FSM 拓扑，[BEHAVIOR.md](BEHAVIOR.md) 定义逐状态算法与策略参数。Rust 签名为契约示意，辅助类型由表格定义，不表示已有可编译实现。
+> 更新：2026-09-19。状态：完整目标接口基线；第一阶段仅实现其简化子集。本文定义目标字段、调用方向、所有权、错误和时序；[DESIGN.md](DESIGN.md) 定义架构和 FSM 拓扑，[BEHAVIOR.md](BEHAVIOR.md) 定义逐状态算法与策略参数。Rust 签名为目标契约示意，不等同于当前源码签名。
 > 官方 JSON 仍以 `docs/docs/接口文档.md` 为准。本文中的 ID、版本和事件字段是内部元数据，不能擅自加入比赛响应。
 
 ## 1. 接口边界与实现方式
+
+当前源码入口为 `transport::serve(port)` → `runtime::Session::handle(&[u8]) -> Vec<u8>` → `protocol::decode/encode`、`world::World::apply`、`ai::decide`、`command::Arbiter::propose/finish`。`Session` 使用观测先更新、`DecisionState` 克隆草稿并在编码及截止检查后提交，缓存同回合同请求结果；但尚无正式的 `TurnStamp/OwnerPath`、generation 验证、ResourceCoordinator、层级输出/报告队列或 IF16 回放。现有 `WorldView` 是观测的只读查询封装，不等同于本文完整 WorldSnapshot。接口变更先对照此差距，逐段迁移，不能把目标签名写成已交付 API。
+
+| 接口组 | 第一阶段实现范围 |
+| --- | --- |
+| IF01–IF03 | JSON/HTTP、简化回合缓存与草稿提交；未完成正式事务代次、官方路由验证和日志 |
+| IF04–IF05 | 基础快照差分、记忆、几何/建造掩码、局部动作校验；无完整预测和规则服务 |
+| IF06–IF09 | 直接函数调用和少量状态记录；未实现层级消息、任务 DAG、个体转移契约 |
+| IF10–IF11 | 事件 enum 与状态 enum；无 inbox/路由/报告或通用 FSM 驱动 |
+| IF12–IF14 | 本轮内角色、目标格、金币的基础预约与响应编码；其余资源/动作及回执未覆盖 |
+| IF15–IF16 | 单次 LLM prompt/下一回合答案；无完整作业、沙盒、SOP、遥测/回放 |
 
 同进程 Rust 模块间以函数/方法及类型化消息交互。只有 HTTP 边界异步；世界更新、决策、预约和提交由单会话状态所有者串行执行。下层不持有上层对象的可变引用，各层不相互直接调用：runtime 调用组件，再按契约路由其输出。
 

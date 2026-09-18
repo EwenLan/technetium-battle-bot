@@ -1,0 +1,25 @@
+{
+  "roundNo": 71,
+  "mapInfo": {"width": 8, "height": 8, "zones": []},
+  "teamOur": {
+    "type": "challenger",
+    "teamId": "alpha",
+    "goldNum": 50,
+    "roles": [
+      {"id": 10, "pos": {"x": 3, "y": 4}, "roleType": "worker", "health": 220, "backPackCapability": 100, "backpack": []},
+      {"id": 11, "pos": {"x": 5, "y": 5}, "roleType": "pioneer", "health": 200, "backPackCapability": 40, "backpack": []},
+      {"id": 12, "pos": {"x": 4, "y": 3}, "roleType": "worker", "health": 220, "backPackCapability": 100, "backpack": []},
+      {"id": 13, "pos": {"x": 2, "y": 6}, "roleType": "station", "health": 1500, "level": 1},
+      {"id": 20, "pos": {"x": 4, "y": 4}, "roleType": "gatling", "health": 1000, "level": 1, "cooldown": 0, "attackRange": 3}
+    ]
+  },
+  "teamEnemy": {"roles": []},
+  "robot": {"roles": [
+    {"id": 30, "pos": {"x": 6, "y": 4}, "roleType": "smallRobot", "health": 40}
+  ]},
+  "phaseTask": "",
+  "lastRoundRoleActionResults": {},
+  "llmResp": "",
+  "vendorShopList": [],
+  "weaponShopList": []
+}

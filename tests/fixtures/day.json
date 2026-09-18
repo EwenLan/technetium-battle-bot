@@ -1,0 +1,34 @@
+{
+  "roundNo": 1,
+  "mapInfo": {
+    "width": 8,
+    "height": 8,
+    "zones": [
+      {"pos": {"x": 5, "y": 5}, "neutralType": "iron"},
+      {"pos": {"x": 5, "y": 2}, "neutralType": "vendor"},
+      {"pos": {"x": 6, "y": 2}, "neutralType": "challengerTaskPoint1"}
+    ]
+  },
+  "teamOur": {
+    "type": "challenger",
+    "teamId": "alpha",
+    "goldNum": 75,
+    "playerTasks": [
+      {"taskType": "自进化类1", "taskPosition": {"x": 6, "y": 2}, "coldDownRounds": 0, "scoreReward": 50, "goldReward": 30, "isValid": true, "timeoutRounds": 30}
+    ],
+    "roles": [
+      {"id": 10, "pos": {"x": 3, "y": 4}, "roleType": "worker", "health": 220, "backPackCapability": 100, "backpack": []},
+      {"id": 11, "pos": {"x": 3, "y": 2}, "roleType": "pioneer", "health": 200, "backPackCapability": 40, "backpack": []},
+      {"id": 12, "pos": {"x": 4, "y": 3}, "roleType": "worker", "health": 220, "backPackCapability": 100, "backpack": []},
+      {"id": 13, "pos": {"x": 2, "y": 6}, "roleType": "station", "health": 1500, "level": 1}
+    ]
+  },
+  "teamEnemy": {"roles": []},
+  "robot": {"roles": []},
+  "phaseTask": "",
+  "lastRoundRoleActionResults": {},
+  "llmResp": "",
+  "worldNews": {"officialNews": "", "folkLegends": ""},
+  "vendorShopList": [{"name": "iron", "price": 3}],
+  "weaponShopList": []
+}
