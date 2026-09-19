@@ -52,7 +52,7 @@ LLM 服务于新闻推理、宝藏线索和自进化任务，通过比赛的 `pr
 
 细化版设计已补充世界生命周期、各层状态行为/转移矩阵、10 类任务流程、类型化事件/上报目录，以及挑战、认知作业、新闻和宝藏子状态机。共用约束包括分阶段有限推进、保存未消费证据、报告作用域、取消代次和终止作业墓碑；动作提出、提交和效果确认分开处理。
 
-目标接口基线为 IF01–IF16，统一 TurnStamp/OwnerPath、任务规范与私有记录、意图/建议/已提交动作、类型化事件、资源租约与认知作业。当前已实现 OwnerPath/ActiveOwners 的完整父链代际校验，已接受动作/等待记录/Step 报告的 owner 贯通，以及简化事件日志的按层 cursor/poll/ack；只有战略读者接入 Session 草稿。ResourceCoordinator、持久任务 DAG、ActionProposal owner、共享 decision 模块、正式信封/报告路由与预测仓尚未实现。
+目标接口基线为 IF01–IF16，统一 TurnStamp/OwnerPath、任务规范与私有记录、意图/建议/已提交动作、类型化事件、资源租约与认知作业。当前已实现 OwnerPath/ActiveOwners 的完整父链代际校验、带 owner 的简化 ActionProposal、响应编译前复验、等待/Step 报告 owner 贯通，以及简化事件日志的按层 cursor/poll/ack；只有战略读者接入 Session 草稿。ResourceCoordinator、持久任务 DAG、正式提案元数据、共享 decision 模块、正式信封/报告路由与预测仓尚未实现。
 
 ## 4. 重要事实与待确认项
 
@@ -139,6 +139,14 @@ U01 已解决：用户确认基地 2×2，武器环为周围 4×4 减基地，�
 - 对账先保留旧 owner 的合法/拒绝/死亡/未知事实，再检查完整父链；替代工作已撤销旧 mission 时，迟到报告不修改新工作的角色/战术/任务状态。
 - 当前是每个提交动作创建一条过渡任务链；持久任务 DAG、assignment owner、ActionProposal/最终提交复验和完整报告字段仍待开发。
 - 验证通过：rustfmt、Clippy warnings-as-errors、44 个集成测试、locked release 构建、本机 HTTP JSON 冒烟，以及本阶段文件/函数长度和业务代码数字字面量审计。
+
+### 2026-09-20：将 OwnerPath 前移到动作提案与最终仲裁
+
+- 新增简化 `ActionProposal { actor, owner, action }`；任务、开拓者和防守策略通过统一 helper 在动作校验前准备 owner，攻击 owner 归属 controller。
+- `Arbiter::propose` 同时检查动作、冲突及完整 owner 链；本地拒绝撤销新候选且保留角色原工作。`finish` 在响应编译前再次过滤失效 owner，并把响应及私有最终 accepted 集合封装为 `ArbitrationResult`。
+- `record_committed` 只接受 `ArbitrationResult`，不再分配 owner，因而不能用初验提案绕过最终校验；提案、响应授权、PendingAction 和 ExecutionReport 使用同一路径。
+- 新增本地拒绝事务、攻击控制者归属和最终失效提案不编码的回归测试；持久任务 assignment、正式提案 ID/stamp/claims/效果、ResourceCoordinator 和 ValidatedAction 仍待实现。
+- 验证通过：rustfmt、Clippy warnings-as-errors、47 个 Rust 测试（2 个单元、45 个集成）、locked release 构建、本机 HTTP 200 JSON 冒烟，以及本阶段文件长度和业务代码数字字面量审计。
 
 ## 6. 后续记录规范
 

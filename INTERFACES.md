@@ -5,7 +5,7 @@
 
 ## 1. 接口边界与实现方式
 
-当前源码入口为 `transport::serve(port)` → `runtime::Session::handle(&[u8]) -> Vec<u8>` → `protocol::decode/encode`、`world::World::apply`、`ai::decide`、`command::Arbiter::propose/finish`。`Session` 先持久化观测和上一轮合法性回执，再克隆 `DecisionState` 草稿；新动作、owner 分配和战略事件游标仅在决策成功、编码及截止检查通过后提交，并缓存同回合同请求结果。`domain::OwnerPath/ActiveOwners/OwnerAllocator` 已接入已接受动作、等待记录和 Step 报告：报告保留原 owner 与操控角色 reporter，只有完整父链仍有效时才更新当前简化 FSM。仍无正式 `TurnStamp`、ResourceCoordinator、层级输出/报告队列或 IF16 回放。当前 owner 是每次实际提交动作创建的过渡性完整链，尚不是来自持久任务 DAG 的 assignment；`ActionProposal` 也未在仲裁前携带 owner。合法回执仍不等于效果确认。现有 `WorldView` 是观测的只读查询封装，不等同于本文完整 WorldSnapshot。
+当前源码入口为 `transport::serve(port)` → `runtime::Session::handle(&[u8]) -> Vec<u8>` → `protocol::decode/encode`、`world::World::apply`、`ai::decide`、`command::Arbiter::propose/finish`。`Session` 先持久化观测和上一轮合法性回执，再克隆 `DecisionState` 草稿；新动作、owner 分配和战略事件游标仅在决策成功、编码及截止检查通过后提交，并缓存同回合同请求结果。简化 `ActionProposal { actor, owner, action }` 已作为仲裁输入：`propose` 初验完整 owner 链，`finish` 在编译响应前复验，等待记录和 Step 报告复用获准提案的 owner。仍无正式 `TurnStamp`、ResourceCoordinator、层级输出/报告队列或 IF16 回放。当前 owner 是每个候选动作创建的过渡性完整链，尚不是来自持久任务 DAG 的 assignment；合法回执仍不等于效果确认。现有 `WorldView` 是观测的只读查询封装，不等同于本文完整 WorldSnapshot。
 
 本阶段 `WorldView::task_cells/task_stands/adjacent_task` 将同一任务点的多格 `zones` 合并为交互候选；目前仍采用相邻格交互的保守假设，正式站位语义待 U03 联调。
 
@@ -13,7 +13,7 @@
 | --- | --- |
 | IF01–IF03 | JSON/HTTP、重复键/地图实体与 footprint 边界校验、简化回合缓存与草稿提交；未完成正式事务代次、官方路由验证和结构化日志 |
 | IF04–IF05 | 世界就绪/降级/恢复、有效快照保留、基础差分/记忆、几何/动态建造环、局部动作校验；无完整预测和规则服务 |
-| IF06–IF09 | 直接函数调用、带 OwnerPath 的提交后等待及回执报告；未实现层级消息、持久任务 DAG、ActionProposal owner 或完整个体转移契约 |
+| IF06–IF09 | 直接函数调用、带 OwnerPath 的简化 ActionProposal、提交后等待及回执报告；未实现层级消息、持久任务 DAG、正式提案元数据或完整个体转移契约 |
 | IF10–IF11 | 事件/状态 enum、稳定 ID 的有界事件日志、四个层级读者的独立 cursor/poll/ack、截断和陈旧 receipt 检测、带 intent scope 的有限 Step 报告及旧 owner 隔离；无信封过滤/完整路由或通用 FSM 驱动 |
 | IF12–IF14 | 本轮内角色、目标格、金币的基础预约与响应编码；其余资源/动作及回执未覆盖 |
 | IF15–IF16 | 单次 LLM prompt/下一回合答案；无完整作业、沙盒、SOP、遥测/回放 |
@@ -91,7 +91,7 @@ enum WorkOwner {
 
 `OwnerPath` 必须由构造器保证父链完整：有 intent 必有 plan；子节点必须登记在对应父节点下。任务代次失效会使其所有计划/意图失效，计划代次失效只影响该计划。运行时的 `ActiveOwners` 索引提供 `is_current(owner)`，最终校验不能只检查最末级 generation。
 
-当前 `domain::owner` 已交付 `MissionId/PlanId/IntentId/Generation/Versioned/OwnerPath/ActiveOwners/OwnerAllocator`。分配器在决策草稿内确定递增，原子创建完整三段路径；注册子节点前检查当前父链，同一 ID 只允许严格递增 generation，且不能换父节点。角色开始替代工作时撤销旧 mission 的活动登记，`is_current` 从 mission 开始逐级比对。已提交动作和 `ExecutionReport` 保存原路径；旧路径报告仍作为事实返回，但不修改替代工作的状态。持久任务 ID 分配、细粒度 plan/intent 取消和任务 DAG 仍待实现。
+当前 `domain::owner` 已交付 `MissionId/PlanId/IntentId/Generation/Versioned/OwnerPath/ActiveOwners/OwnerAllocator`。分配器在决策草稿内确定递增，原子创建完整三段路径；注册子节点前检查当前父链，同一 ID 只允许严格递增 generation，且不能换父节点。候选路径先进入 ActionProposal；初次校验失败会撤销候选且保留该角色的原 owner，接受后才撤销原 mission。响应编译再次从 mission 到 intent 逐级比对，失效提案不会编码或进入等待。已发送动作和 `ExecutionReport` 保存原路径；旧路径报告仍作为事实返回，但不修改替代工作的状态。持久任务 ID 分配、细粒度 plan/intent 取消和任务 DAG 仍待实现。
 
 行动建议必须精确匹配本轮 `TurnStamp`。跨回合 Mission/Plan 可以保留，但其下一步建议必须基于当前快照重新校验并重新盖 stamp；不能只替换旧建议的 round。已提交动作和作业保存发送时的原 stamp，不能因旧代次失效而删掉真实回执。
 
@@ -352,6 +352,8 @@ struct ActionProposal {
 }
 ```
 
+当前源码的过渡类型只包含 `actor: i64`、`owner: OwnerPath` 和 `action: Action`。actor 单独保存是因为现有简化 `Action` 尚未携带主体；`reporter()` 对普通动作返回 actor，对攻击返回 controller。`ai::propose_owned` 负责候选路径的准备、接受或撤销，`Arbiter::propose` 校验当时的 owner 与动作/冲突，`Arbiter::finish` 再过滤失效 owner。它返回的 `ArbitrationResult` 拥有响应及私有最终 accepted 集合，`record_committed` 只接受该结果，调用方不能用初验集合绕过最终校验。这不等同于下述正式 ID/stamp/claims/expected/group 契约已完成。
+
 `Action` 内含执行主体，`actor()` 由它计算，禁止另存一份可冲突的 actor 字段。攻击 actor 是武器，`participants()` 同时包含操控角色。`ExpectedEffect` 是效果谓词及确认窗口/证据要求，不能被 world 当成事实；可表示 PositionChanged/InventoryDelta/BuildingChanged/AttackAcknowledged/ChallengeChanged/TreasureResult。
 
 `CommitReceipt = {stamp、committed_actions、committed_jobs、rejected_proposals}`。每条已提交动作包含 action ID、原 proposal/intent、执行主体、参与者、claim IDs、发送回合和预期效果。on_commit 在提交前的草稿上运行，StatePatch 仅允许更新本层提交/等待状态，不得再输出游戏动作；不是网络发送后的可失败回调。
@@ -404,7 +406,7 @@ fn acknowledge(&mut self, reader: ReaderId, receipt: DeliveryReceipt)
 | `ProgressSnapshot` | `completed_goals、remaining_goals、eta: Knowledge<Round>、confidence、last_progress_round`；ETA 未知不能为零 |
 | `ReportStatus` | `Progress/Completed/Blocked/Failed/AtRisk/ResourceNeeded`，reason 为对应类型化细分原因，完整清单见 DESIGN 7.3 |
 
-当前简化 `ExecutionReport` 已包含 `owner: OwnerPath`、`reporter`、带具体 intent 的 `Step` scope、status/reason 和观测回合。`PendingAction` 保存相同 owner，攻击的 reporter 是 controller、actor 仍是武器，因此回执继续按武器 key 查询。当前尚无 ReportId、progress、证据引用、资源请求和有效期；新 owner 分配发生在动作通过仲裁后，待 ActionProposal 落地时前移到提案与最终提交校验。
+当前简化 `ExecutionReport` 已包含 `owner: OwnerPath`、`reporter`、带具体 intent 的 `Step` scope、status/reason 和观测回合。`PendingAction` 保存最终 accepted 提案的相同 owner，攻击的 reporter 是 controller、actor 仍是武器，因此回执继续按武器 key 查询。当前尚无 ReportId、progress、证据引用、资源请求和有效期；owner 已在简化 ActionProposal 创建时分配并在响应编译前复验，后续需改由持久 assignment 提供。
 
 报告只递交其直接父级，父级复验后可生成新的汇总报告；同一 ReportId 不因包装成事件就产生新的业务效果。战略日志摘要使用独立 `StrategySummary`，不伪装成有不存在父任务的报告。
 

@@ -1,33 +1,38 @@
-use crate::ai::DecisionState;
 use crate::ai::cognition;
 use crate::ai::mission::economy::{pioneer_max_hp, should_heal};
 use crate::ai::tactics::next_step;
+use crate::ai::{DecisionState, propose_owned};
 use crate::command::Arbiter;
-use crate::domain::{Action, Observation, PlayerTask, Role};
+use crate::domain::{Action, Observation, OwnerError, PlayerTask, Role};
 use crate::rules::constants::{
     ANSWER_MARGIN_ROUNDS, CHALLENGE_SETUP_ROUNDS, NO_COOLDOWN, NO_HEALTH,
 };
 use crate::world::WorldView;
 
-pub fn assign(observation: &Observation, state: &mut DecisionState, arbiter: &mut Arbiter<'_>) {
+pub fn assign(
+    observation: &Observation,
+    state: &mut DecisionState,
+    arbiter: &mut Arbiter<'_>,
+) -> Result<(), OwnerError> {
     let Some(pioneer) = observation
         .team_our
         .roles
         .iter()
         .find(|role| role.role_type == "pioneer")
     else {
-        return;
+        return Ok(());
     };
     if pioneer.health.unwrap_or(NO_HEALTH) <= NO_HEALTH {
-        return;
+        return Ok(());
     }
     let action = choose_action(observation, pioneer, state);
     if let Some(action) = action {
         let submitted = matches!(action, Action::SubmitAnswer(_));
-        if arbiter.propose(pioneer.id, action) && submitted {
+        if propose_owned(state, arbiter, pioneer.id, action)? && submitted {
             cognition::record_submission(observation, &mut state.challenge);
         }
     }
+    Ok(())
 }
 
 fn choose_action(

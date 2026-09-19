@@ -1,5 +1,6 @@
 use crate::ai::DecisionState;
-use crate::domain::{Action, Observation, OwnerError, OwnerPath};
+use crate::command::ArbitrationResult;
+use crate::domain::{Action, Observation, OwnerPath};
 use crate::event::{ExecutionReport, ReportReason, ReportScope, ReportStatus};
 use crate::fsm::{IndividualState, MissionState, TacticalState};
 use crate::rules::constants::{MIN_ACTION_ROUNDS, NO_HEALTH};
@@ -13,21 +14,16 @@ pub struct PendingAction {
     pub sent_round: i32,
 }
 
-pub fn record_committed(
-    round: i32,
-    accepted: &[(i64, Action)],
-    state: &mut DecisionState,
-) -> Result<(), OwnerError> {
-    for (actor, action) in accepted {
-        let reporter = action_reporter(*actor, action);
-        let owner = state.start_work(reporter)?;
+pub fn record_committed(round: i32, arbitration: &ArbitrationResult, state: &mut DecisionState) {
+    for proposal in arbitration.accepted() {
+        let reporter = proposal.reporter();
         state.pending_actions.insert(
             reporter,
             PendingAction {
-                actor: *actor,
+                actor: proposal.actor(),
                 reporter,
-                owner,
-                action: action.clone(),
+                owner: *proposal.owner(),
+                action: proposal.action().clone(),
                 sent_round: round,
             },
         );
@@ -35,7 +31,6 @@ pub fn record_committed(
             .individuals
             .insert(reporter, IndividualState::WaitingResult);
     }
-    Ok(())
 }
 
 pub fn reconcile(observation: &Observation, state: &mut DecisionState) -> Vec<ExecutionReport> {
@@ -51,13 +46,6 @@ pub fn reconcile(observation: &Observation, state: &mut DecisionState) -> Vec<Ex
         reports.push(report);
     }
     reports
-}
-
-fn action_reporter(actor: i64, action: &Action) -> i64 {
-    match action {
-        Action::Attack { controller, .. } => *controller,
-        _ => actor,
-    }
 }
 
 fn action_report(observation: &Observation, pending: &PendingAction) -> ExecutionReport {

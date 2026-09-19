@@ -1,6 +1,6 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
-use crate::domain::{Action, Command, Observation, Response};
+use crate::domain::{Action, ActionProposal, ActiveOwners, Observation, Response};
 use crate::rules::build::BuildArea;
 use crate::rules::constants::{NO_HEALTH, ZERO_GOLD};
 use crate::rules::time::{Phase, phase};
@@ -8,12 +8,11 @@ use crate::world::WorldView;
 
 pub struct Arbiter<'a> {
     view: WorldView<'a>,
-    commands: BTreeMap<String, Command>,
     used_roles: BTreeSet<i64>,
     reserved_destinations: BTreeSet<crate::domain::Pos>,
     reserved_build_sites: BTreeSet<crate::domain::Pos>,
     reserved_weapon_count: usize,
-    accepted: Vec<(i64, Action)>,
+    accepted: Vec<ActionProposal>,
     remaining_gold: Option<i32>,
 }
 
@@ -21,7 +20,6 @@ impl<'a> Arbiter<'a> {
     pub fn new(observation: &'a Observation) -> Self {
         Self {
             view: WorldView::new(observation),
-            commands: BTreeMap::new(),
             used_roles: BTreeSet::new(),
             reserved_destinations: BTreeSet::new(),
             reserved_build_sites: BTreeSet::new(),
@@ -31,25 +29,36 @@ impl<'a> Arbiter<'a> {
         }
     }
 
-    pub fn propose(&mut self, actor: i64, action: Action) -> bool {
-        if self.used_roles.contains(&actor) || !self.validate(actor, &action) {
+    pub fn propose(&mut self, proposal: &ActionProposal, owners: &ActiveOwners) -> bool {
+        let actor = proposal.actor();
+        if !owners.is_current(proposal.owner())
+            || self.used_roles.contains(&actor)
+            || !self.validate(actor, proposal.action())
+        {
             return false;
         }
-        let key = actor.to_string();
-        self.reserve(actor, &action);
-        self.accepted.push((actor, action.clone()));
-        self.commands.insert(key, Command::from(action));
+        self.reserve(actor, proposal.action());
+        self.accepted.push(proposal.clone());
         true
     }
 
-    pub fn accepted(&self) -> &[(i64, Action)] {
-        &self.accepted
-    }
-
-    pub fn finish(self) -> Response {
-        Response {
-            role_command_map: self.commands,
-            ..Response::default()
+    pub fn finish(self, owners: &ActiveOwners) -> ArbitrationResult {
+        let accepted: Vec<_> = self
+            .accepted
+            .into_iter()
+            .filter(|proposal| owners.is_current(proposal.owner()))
+            .collect();
+        let role_command_map = accepted
+            .iter()
+            .cloned()
+            .map(|proposal| (proposal.actor().to_string(), proposal.into_command()))
+            .collect();
+        ArbitrationResult {
+            response: Response {
+                role_command_map,
+                ..Response::default()
+            },
+            accepted,
         }
     }
 
@@ -263,6 +272,17 @@ impl<'a> Arbiter<'a> {
         if let Action::Attack { controller, .. } = action {
             self.used_roles.insert(*controller);
         }
+    }
+}
+
+pub struct ArbitrationResult {
+    pub response: Response,
+    accepted: Vec<ActionProposal>,
+}
+
+impl ArbitrationResult {
+    pub(crate) fn accepted(&self) -> &[ActionProposal] {
+        &self.accepted
     }
 }
 

@@ -6,9 +6,9 @@ pub use construction::BuildPlan;
 
 use std::time::Instant;
 
-use crate::ai::{DecisionState, tactics};
+use crate::ai::{DecisionState, propose_owned, tactics};
 use crate::command::Arbiter;
-use crate::domain::Observation;
+use crate::domain::{Observation, OwnerError};
 use crate::fsm::{IndividualState, MissionState, StrategyState, TacticalState};
 use crate::rules::time::{Phase, phase};
 
@@ -17,7 +17,7 @@ pub fn assign(
     state: &mut DecisionState,
     arbiter: &mut Arbiter<'_>,
     deadline: Instant,
-) {
+) -> Result<(), OwnerError> {
     construction::refresh(observation, state);
     let is_night = phase(observation.round_no) == Some(Phase::Night);
     let returning = matches!(
@@ -25,10 +25,9 @@ pub fn assign(
         StrategyState::PrepareNight | StrategyState::Emergency
     );
     if is_night || returning {
-        tactics::defend(observation, arbiter);
-        return;
+        return tactics::defend(observation, state, arbiter);
     }
-    assign_day(observation, state, arbiter, deadline);
+    assign_day(observation, state, arbiter, deadline)
 }
 
 fn assign_day(
@@ -36,7 +35,7 @@ fn assign_day(
     state: &mut DecisionState,
     arbiter: &mut Arbiter<'_>,
     deadline: Instant,
-) {
+) -> Result<(), OwnerError> {
     let mut workers: Vec<_> = observation
         .team_our
         .roles
@@ -55,9 +54,9 @@ fn assign_day(
         {
             continue;
         }
-        assign_worker(observation, worker, state, arbiter);
+        assign_worker(observation, worker, state, arbiter)?;
     }
-    pioneer::assign(observation, state, arbiter);
+    pioneer::assign(observation, state, arbiter)
 }
 
 fn assign_worker(
@@ -65,21 +64,22 @@ fn assign_worker(
     worker: &crate::domain::Role,
     state: &mut DecisionState,
     arbiter: &mut Arbiter<'_>,
-) {
+) -> Result<(), OwnerError> {
     let action = construction::worker_action(observation, worker, state)
         .or_else(|| economy::worker_action(observation, worker));
-    let Some(action) = action else { return };
-    let state_after = state_for_action(&action);
+    let Some(action) = action else { return Ok(()) };
+    let (tactical_state, individual_state) = state_for_action(&action);
     let building = matches!(action, crate::domain::Action::Build { .. });
-    if !arbiter.propose(worker.id, action) {
-        return;
+    if !propose_owned(state, arbiter, worker.id, action)? {
+        return Ok(());
     }
     if building {
         construction::mark_sent(state, worker.id, observation.round_no);
     }
     state.missions.insert(worker.id, MissionState::Executing);
-    state.tactics.insert(worker.id, state_after.0);
-    state.individuals.insert(worker.id, state_after.1);
+    state.tactics.insert(worker.id, tactical_state);
+    state.individuals.insert(worker.id, individual_state);
+    Ok(())
 }
 
 fn state_for_action(action: &crate::domain::Action) -> (TacticalState, IndividualState) {

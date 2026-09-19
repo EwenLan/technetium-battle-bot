@@ -71,7 +71,7 @@ run.sh                     # 当前比赛服务入口：bash run.sh <port>
 | 服务/协议 | 有界 HTTP 请求、POST、类型化 JSON、重复键拒绝、同轮同负载字节缓存、完整空响应 | 官方路由/运行环境联调、结构化日志、完整事务与截止回滚 |
 | 世界/事件 | `ColdStart/Ready/Degraded` 生命周期、有效快照保留/恢复、稳定 ID 的有界事件日志、按层独立消费游标/确认/截断检测、实体差分、敌人记忆及两格任务点合并 | `Closed` 会话信号、三类知识和完整实体索引、预测/来源、事件信封过滤与报告路由 |
 | 战略/任务 | 昼夜/返防/终盘/紧急风险近似，基础采售、动态建造环内三炮建设、开拓者接题；动作级 `OwnerPath/ActiveOwners` 父链与代际校验 | 持久任务/计划/意图记录、指令/预算、全队租约分配、完整任务 DAG 与状态转移 |
-| 战术/个体 | 八向 A*、夜间炮位移动/基础攻击、动作仲裁；已提交动作、等待记录和 Step 报告携带完整 owner，旧 owner 报告隔离 | 提案阶段 owner 校验、联合火力、弹道、动作效果证据与完整七态个体 FSM |
+| 战术/个体 | 八向 A*、夜间炮位移动/基础攻击；简化 ActionProposal 在仲裁和响应编译边界校验完整 owner，等待/Step 报告复用该 owner，旧 owner 报告隔离 | 正式提案 ID/stamp/claims/效果、资源账本、联合火力、弹道、动作效果证据与完整七态个体 FSM |
 | 认知/扩展 | 单次题目 prompt 与下一回合答案提交、有限新闻原文记忆 | 作业代次/额度/沙盒/SOP、新闻解析、宝藏、回放 |
 
 当前直接由 `runtime` 调用决策、`mission` 调用战术辅助函数，这是过渡性接线。完整目标仍以类型化层级输出、批准后分配和统一事件/上报调度为准；不得把已有 enum 或响应字段当成这些契约已完成的证据。
@@ -486,7 +486,7 @@ stateDiagram-v2
 
 报告语义包括作用域、完整 owner 代次链、来源、status/reason、progress、证据、资源需求、建议与有效期，精确类型见 INTERFACES 的 ExecutionReport。角色任务使用 `Step/Plan/Mission` 作用域，无角色任务归属的新闻步骤使用 `NewsStep`，战略摘要独立用于日志。`progress` 至少包含已完成目标、剩余目标、预计完成回合及其置信度。报告建议不具有越层执行权限。
 
-当前垂直切片在动作被仲裁接受后，从决策草稿中的确定性分配器创建 mission/plan/intent 完整路径；`PendingAction` 和下一帧 `ExecutionReport` 复用该路径，Step scope 显式携带 intent。对账始终生成原 owner 的事实报告，再以 `ActiveOwners::is_current` 决定是否更新角色、任务和战术简化状态。替代工作撤销旧 mission 后，迟到的合法、拒绝、死亡或未知报告均不能推进新工作。持久任务 DAG 建成后，应由 assignment 提供 owner，并在仲裁前及提交时复验，而非为每个动作创建新任务链。
+当前垂直切片先从决策草稿中的确定性分配器创建 mission/plan/intent 完整路径，并把它放入简化 `ActionProposal`。仲裁接收提案及编译最终响应时分别调用 `ActiveOwners::is_current`；本地拒绝撤销候选路径且不替换角色原工作，最终失效提案不进入响应或等待。`PendingAction` 和下一帧 `ExecutionReport` 复用同一路径，Step scope 显式携带 intent。对账始终生成原 owner 的事实报告，再检查完整父链是否允许更新简化状态。持久任务 DAG 建成后，应由 assignment 提供并跨步骤复用 mission/plan，只为新步骤生成 intent，而非为每个动作创建新任务链。
 
 | status / reason 示例 | 产生时机与证据 | 父层需要做什么 |
 | --- | --- | --- |

@@ -150,13 +150,19 @@ FSM 管理跨回合阶段，效用评分在状态允许的策略中做选择。�
 
 **状态：采纳，部分落实 D04/D13/D15。** 每个层级读者独立保存下一个待消费事件 ID；poll 不改变状态，处理完成后以包含起止 cursor 的 receipt 确认。只有 receipt 起点仍匹配当前 cursor 才能推进，重复/迟到确认返回 `StaleReceipt`；最旧保留 ID 越过 cursor 时批次显式标记截断。战略 cursor 属于 `DecisionState` 草稿，只有响应编码和截止检查成功才随决策提交，避免失败规划吞掉事件。当前世界事件可由完整观测重验，信封路由和关键截断恢复另行实现。
 
-任务、计划和意图分别使用独立 ID 与 generation。`OwnerPath` 强制 intent 必须有 plan，`ActiveOwners` 注册子节点时校验当前父链、generation 严格递增且同一 ID 不换父；提交校验从 mission 到 intent 逐级核对，父 generation 改变即可使整个旧链失效。代价是重建父任务时必须分配新的子 ID；收益是旧建议不能仅凭末级 generation 偶然匹配。D27 已将该路径接入简化动作等待和报告，持久任务 assignment 与提交前复验仍待实现。
+任务、计划和意图分别使用独立 ID 与 generation。`OwnerPath` 强制 intent 必须有 plan，`ActiveOwners` 注册子节点时校验当前父链、generation 严格递增且同一 ID 不换父；提交校验从 mission 到 intent 逐级核对，父 generation 改变即可使整个旧链失效。代价是重建父任务时必须分配新的子 ID；收益是旧建议不能仅凭末级 generation 偶然匹配。D27 已将该路径接入简化动作等待和报告，D28 再将它前移到动作提案和响应编译；持久任务 assignment 仍待实现。
 
 ## D27：真实回执保留原 owner，状态推进要求 owner 当前有效
 
 **状态：采纳，细化 D09/D13/D26。** 当前垂直切片为每个实际被仲裁接受的动作在决策草稿中确定分配完整 mission/plan/intent 路径，等待记录和 Step 报告保存同一路径；攻击使用武器 actor 查询裁判结果，并以 controller 作为 reporter。角色开始替代工作时撤销旧 mission 活动登记。
 
 对账先根据原 actor、发送回合和当前观测形成事实报告，无论 owner 是否仍有效；随后只有 `ActiveOwners::is_current` 通过，报告才能改变角色、任务和战术状态。因此取消或替代不能抹掉已经发生的裁判回执，迟到结果也不能推进新任务。owner 分配失败使整份决策草稿返回错误并输出空响应，不提交部分等待状态。当前每动作一条任务链是过渡模型；持久任务 DAG 落地后由 assignment 复用 mission/plan，只为新步骤生成 intent，并在提案和最终提交边界复验。
+
+## D28：动作提案携带 owner，并在响应编译前复验
+
+**状态：采纳，细化 D17/D26/D27。** 简化 `ActionProposal` 在进入仲裁前携带 actor、action 和完整 OwnerPath。候选 owner 先在决策草稿中注册；本地动作或冲突校验失败时只撤销该候选，角色原工作不变。提案初次获准后才替换角色 owner；攻击以 controller 作为工作归属，以武器作为协议 actor。
+
+`Arbiter::finish` 在生成 RoleCommand 和 accepted 集合前再次校验完整父链，期间已失效的提案不会编码，也不会创建 PendingAction。最终集合封装在 `ArbitrationResult` 内，只允许个体提交记录读取；个体层复用其中的 owner，不再另建路径。这使等待、回执与仲裁授权拥有同一身份，并保留 Session 草稿的原子提交性质。当前每动作仍创建一条临时完整链，且提案尚无 ProposalId、TurnStamp、claims、ExpectedEffect 和原子组；这些字段与持久 assignment、Reservation/ValidatedAction 留给 P2/P3 后续实现。
 
 ## 变更规则
 

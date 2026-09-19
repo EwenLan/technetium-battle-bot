@@ -1,5 +1,5 @@
 use technetium_battle_bot::command::Arbiter;
-use technetium_battle_bot::domain::{Action, Pos};
+use technetium_battle_bot::domain::{Action, ActiveOwners, OwnerAllocator, Pos};
 use technetium_battle_bot::protocol::decode;
 use technetium_battle_bot::rules::build::{BuildArea, area, wall_sites, weapon_sites};
 use technetium_battle_bot::rules::constants::{MIN_COORDINATE, SINGLE_ITEM, WEAPON_BUILD_GOLD};
@@ -24,6 +24,8 @@ const EDGE_STATION_Y: i32 = 1;
 const EDGE_MAP_SIZE: i32 = 4;
 const CLIPPED_WEAPON_CELLS: usize = 5;
 const CLIPPED_WALL_CELLS: usize = 7;
+
+mod support;
 
 #[test]
 fn build_rings_follow_two_four_six_geometry() {
@@ -106,8 +108,13 @@ fn wall_build_requires_wall_ring_and_worker_stone() {
         .expect("observation")
         .observation;
     let mut arbiter = Arbiter::new(&observation);
-    assert!(!arbiter.propose(
-        observation.team_our.roles[WORKER_INDEX].id,
+    let mut owners = ActiveOwners::default();
+    let mut allocator = OwnerAllocator::default();
+    let actor = observation.team_our.roles[WORKER_INDEX].id;
+    let weapon = support::owned_action(
+        &mut owners,
+        &mut allocator,
+        actor,
         Action::Build {
             name: "gatling".into(),
             pos: Pos {
@@ -115,9 +122,12 @@ fn wall_build_requires_wall_ring_and_worker_stone() {
                 y: WALL_Y,
             },
         },
-    ));
-    assert!(arbiter.propose(
-        observation.team_our.roles[WORKER_INDEX].id,
+    );
+    assert!(!arbiter.propose(&weapon, &owners));
+    let wall = support::owned_action(
+        &mut owners,
+        &mut allocator,
+        actor,
         Action::Build {
             name: "wall".into(),
             pos: Pos {
@@ -125,5 +135,6 @@ fn wall_build_requires_wall_ring_and_worker_stone() {
                 y: WALL_Y,
             },
         },
-    ));
+    );
+    assert!(arbiter.propose(&wall, &owners));
 }

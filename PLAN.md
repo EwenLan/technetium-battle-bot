@@ -28,6 +28,7 @@
 - [x] 当前轮世界事件写入带稳定 ID/来源回合的有界日志；四层读者具有独立 cursor/poll/ack、截断与陈旧 receipt 检测，战略 cursor 随决策草稿事务提交。
 - [x] 实现 `OwnerPath/ActiveOwners` 的 mission→plan→intent 完整父链、严格 generation 推进和旧父链失效检查。
 - [x] 已接受动作、等待记录和 Step 报告携带同一 OwnerPath；替代工作撤销旧 mission，迟到报告保留事实但不推进新工作。
+- [x] 简化 `ActionProposal` 在仲裁前携带 actor/action/owner；初次及响应编译前复验完整父链，本地拒绝不替换原工作，等待记录复用已批准 owner。
 - [x] 连续帧验证 `DayDevelop → PrepareNight → NightDefend → DayDevelop`，并覆盖紧急态退出滞回。
 - [x] 协议校验覆盖我方/敌方/机器人、任务点和基地完整 2×2 footprint，越界帧不进入世界模型。
 - [ ] 完成正式四层/世界 FSM、事件上报闭环、全部 12 类动作、认知作业与新闻/宝藏算法。
@@ -68,7 +69,7 @@
 - [ ] 建立观测事实、历史记忆、预测三种数据及显式来源/有效期。
 - [ ] 实现世界差分、昼夜时钟、死亡/复活、冷却和新闻事件。
 - [ ] 实现四层 enum 状态机的共用转移契约、分阶段投递与上报汇总。
-- [ ] 将动作级 OwnerPath 前移到持久任务 assignment、ActionProposal 和最终提交校验，并补齐 plan/intent 取消、超时、去重、租约释放和有限重规划。
+- [ ] 将已前移到简化 ActionProposal/最终响应校验的动作级 OwnerPath 接入持久任务 assignment，并补齐 plan/intent 取消、超时、去重、租约释放和有限重规划。
 - [ ] 在已有世界降级和按层 cursor/poll/ack 基础上，实现实例路由 inbox、关键截断恢复、guard 与转移预算；事件证据保存后才推进消费游标。
 - [ ] 按 DESIGN 第 7 节实现类型化事件/报告，覆盖生产者、payload、路由、scope、优先级和有效期。
 - [ ] 建立 `decision/` 共用上下文，完成 IF04/IF05/IF10/IF11 的信封、过滤、路由和 FSM 驱动；把已实现的 OwnerPath 校验放入所有提交边界，禁止跨层写状态。
@@ -79,7 +80,7 @@
 
 依赖：P2；建造区域 U01 已解决。
 
-- [ ] 实现 `ActionProposal → Reservation → ValidatedAction → RoleCommand`。
+- [ ] 将已实现的简化 `ActionProposal → RoleCommand` 扩展为 `ActionProposal → Reservation → ValidatedAction → RoleCommand`，补齐 ID/stamp/claims/expected/group。
 - [ ] 实现角色/武器独占、金币/物品数量账本、目标格预约与取消对账。
 - [ ] 实现八方向 A*、可交互终点集合、争同格/互换拒绝、阻塞上报。
 - [ ] 建立采集、出售、购买、建造、升级、维修的任务依赖与能力过滤。

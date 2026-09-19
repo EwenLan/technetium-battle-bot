@@ -4,11 +4,17 @@ pub mod mission;
 pub mod strategy;
 pub mod tactics;
 
+#[cfg(test)]
+mod tests;
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::Instant;
 
 use crate::command::Arbiter;
-use crate::domain::{ActiveOwners, Observation, OwnerAllocator, OwnerError, OwnerPath, Response};
+use crate::domain::{
+    Action, ActionProposal, ActiveOwners, Observation, OwnerAllocator, OwnerError, OwnerPath,
+    Response,
+};
 use crate::event::{EventInbox, EventRecord};
 use crate::fsm::{IndividualState, MissionState, StrategyState, TacticalState};
 
@@ -54,11 +60,44 @@ impl Default for DecisionState {
 impl DecisionState {
     pub fn start_work(&mut self, reporter: i64) -> Result<OwnerPath, OwnerError> {
         let owner = self.active_owners.create_path(&mut self.owner_allocator)?;
+        self.commit_owner(reporter, owner);
+        Ok(owner)
+    }
+
+    fn prepare_action(&mut self, actor: i64, action: Action) -> Result<ActionProposal, OwnerError> {
+        let owner = self.active_owners.create_path(&mut self.owner_allocator)?;
+        Ok(ActionProposal::new(actor, owner, action))
+    }
+
+    fn commit_proposal(&mut self, proposal: &ActionProposal) {
+        self.commit_owner(proposal.reporter(), *proposal.owner());
+    }
+
+    fn discard_proposal(&mut self, proposal: &ActionProposal) {
+        self.active_owners
+            .deactivate_mission(proposal.owner().mission().id);
+    }
+
+    fn commit_owner(&mut self, reporter: i64, owner: OwnerPath) {
         if let Some(previous) = self.role_owners.insert(reporter, owner) {
             self.active_owners.deactivate_mission(previous.mission().id);
         }
-        Ok(owner)
     }
+}
+
+pub(crate) fn propose_owned(
+    state: &mut DecisionState,
+    arbiter: &mut Arbiter<'_>,
+    actor: i64,
+    action: Action,
+) -> Result<bool, OwnerError> {
+    let proposal = state.prepare_action(actor, action)?;
+    if arbiter.propose(&proposal, &state.active_owners) {
+        state.commit_proposal(&proposal);
+        return Ok(true);
+    }
+    state.discard_proposal(&proposal);
+    Ok(false)
 }
 
 pub fn decide(
@@ -74,9 +113,10 @@ pub fn decide(
         &mut state.emergency_clear,
     );
     let mut arbiter = Arbiter::new(observation);
-    mission::assign(observation, state, &mut arbiter, deadline);
-    individual::record_committed(observation.round_no, arbiter.accepted(), state)?;
-    let mut response = arbiter.finish();
+    mission::assign(observation, state, &mut arbiter, deadline)?;
+    let arbitration = arbiter.finish(&state.active_owners);
+    individual::record_committed(observation.round_no, &arbitration, state);
+    let mut response = arbitration.response;
     response.prompt = cognition::prepare_prompt(observation, &mut state.challenge);
     Ok(response)
 }

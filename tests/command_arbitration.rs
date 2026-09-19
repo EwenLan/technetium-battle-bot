@@ -1,5 +1,5 @@
 use technetium_battle_bot::command::Arbiter;
-use technetium_battle_bot::domain::{Action, Pos};
+use technetium_battle_bot::domain::{Action, ActiveOwners, OwnerAllocator, Pos};
 use technetium_battle_bot::protocol::decode;
 use technetium_battle_bot::rules::constants::{DEFAULT_LEVEL, NEIGHBOR_RANGE, NEXT_LEVEL};
 
@@ -14,12 +14,19 @@ const ROBOT_X: i32 = 6;
 const ROBOT_Y: i32 = 4;
 const WEAPON_X: i32 = 4;
 
+mod support;
+
+fn owner_context() -> (ActiveOwners, OwnerAllocator) {
+    (ActiveOwners::default(), OwnerAllocator::default())
+}
+
 #[test]
 fn attack_reserves_its_controller_action_slot() {
     let observation = decode(NIGHT_REQUEST.as_bytes())
         .expect("fixture")
         .observation;
     let mut arbiter = Arbiter::new(&observation);
+    let (mut owners, mut allocator) = owner_context();
     let target = Pos {
         x: ROBOT_X,
         y: ROBOT_Y,
@@ -28,26 +35,48 @@ fn attack_reserves_its_controller_action_slot() {
         x: MOVE_TARGET_X,
         y: MOVE_TARGET_Y,
     };
-    assert!(arbiter.propose(
+    let attack = support::owned_action(
+        &mut owners,
+        &mut allocator,
         WEAPON_ID,
         Action::Attack {
             controller: WORKER_ONE,
-            targets: vec![target]
-        }
-    ));
-    assert!(!arbiter.propose(WORKER_ONE, Action::Move(move_target)));
+            targets: vec![target],
+        },
+    );
+    assert!(arbiter.propose(&attack, &owners));
+    let movement = support::owned_action(
+        &mut owners,
+        &mut allocator,
+        WORKER_ONE,
+        Action::Move(move_target),
+    );
+    assert!(!arbiter.propose(&movement, &owners));
 }
 
 #[test]
 fn same_destination_is_reserved_once() {
     let observation = decode(DAY_REQUEST.as_bytes()).expect("fixture").observation;
     let mut arbiter = Arbiter::new(&observation);
+    let (mut owners, mut allocator) = owner_context();
     let target = Pos {
         x: MOVE_TARGET_X,
         y: MOVE_TARGET_Y,
     };
-    assert!(arbiter.propose(WORKER_ONE, Action::Move(target)));
-    assert!(!arbiter.propose(WORKER_TWO, Action::Move(target)));
+    let first = support::owned_action(
+        &mut owners,
+        &mut allocator,
+        WORKER_ONE,
+        Action::Move(target),
+    );
+    let second = support::owned_action(
+        &mut owners,
+        &mut allocator,
+        WORKER_TWO,
+        Action::Move(target),
+    );
+    assert!(arbiter.propose(&first, &owners));
+    assert!(!arbiter.propose(&second, &owners));
 }
 
 #[test]
@@ -71,11 +100,37 @@ fn upgraded_gatling_rejects_opposite_target_directions() {
         y: ROBOT_Y,
     };
     let mut arbiter = Arbiter::new(&observation);
-    assert!(!arbiter.propose(
+    let (mut owners, mut allocator) = owner_context();
+    let attack = support::owned_action(
+        &mut owners,
+        &mut allocator,
         WEAPON_ID,
         Action::Attack {
             controller: WORKER_ONE,
-            targets: vec![right, left]
-        }
-    ));
+            targets: vec![right, left],
+        },
+    );
+    assert!(!arbiter.propose(&attack, &owners));
+}
+
+#[test]
+fn invalidated_owner_is_removed_before_encoding() {
+    let observation = decode(DAY_REQUEST.as_bytes()).expect("fixture").observation;
+    let mut arbiter = Arbiter::new(&observation);
+    let (mut owners, mut allocator) = owner_context();
+    let proposal = support::owned_action(
+        &mut owners,
+        &mut allocator,
+        WORKER_ONE,
+        Action::Move(Pos {
+            x: MOVE_TARGET_X,
+            y: MOVE_TARGET_Y,
+        }),
+    );
+    assert!(arbiter.propose(&proposal, &owners));
+    owners.deactivate_mission(proposal.owner().mission().id);
+
+    let result = arbiter.finish(&owners);
+
+    assert!(result.response.role_command_map.is_empty());
 }

@@ -1,7 +1,8 @@
 use std::collections::BTreeSet;
 
+use crate::ai::{DecisionState, propose_owned};
 use crate::command::Arbiter;
-use crate::domain::{Action, Observation, Pos, Role};
+use crate::domain::{Action, Observation, OwnerError, Pos, Role};
 use crate::rules::constants::{
     DEFAULT_LEVEL, MAX_FIRE_TARGETS, NEIGHBOR_RANGE, NO_COOLDOWN, NO_HEALTH,
 };
@@ -10,7 +11,11 @@ use crate::world::WorldView;
 
 use super::next_step;
 
-pub fn defend(observation: &Observation, arbiter: &mut Arbiter<'_>) {
+pub fn defend(
+    observation: &Observation,
+    state: &mut DecisionState,
+    arbiter: &mut Arbiter<'_>,
+) -> Result<(), OwnerError> {
     let view = WorldView::new(observation);
     let mut available: BTreeSet<i64> = observation
         .team_our
@@ -40,9 +45,10 @@ pub fn defend(observation: &Observation, arbiter: &mut Arbiter<'_>) {
             } else {
                 controller.id
             };
-            arbiter.propose(actor, action);
+            propose_owned(state, arbiter, actor, action)?;
         }
     }
+    Ok(())
 }
 
 fn is_alive(role: &Role) -> bool {

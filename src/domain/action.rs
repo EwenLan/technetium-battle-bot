@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use serde::Serialize;
 
-use super::Pos;
+use super::{OwnerPath, Pos};
 
 #[derive(Clone, Debug)]
 pub enum Action {
@@ -18,6 +18,46 @@ pub enum Action {
     SummonTreasure { pos: Pos, items: Vec<String> },
     Use { name: String, pos: Option<Pos> },
     Drop(String),
+}
+
+#[derive(Clone, Debug)]
+pub struct ActionProposal {
+    actor: i64,
+    owner: OwnerPath,
+    action: Action,
+}
+
+impl ActionProposal {
+    pub const fn new(actor: i64, owner: OwnerPath, action: Action) -> Self {
+        Self {
+            actor,
+            owner,
+            action,
+        }
+    }
+
+    pub const fn actor(&self) -> i64 {
+        self.actor
+    }
+
+    pub const fn owner(&self) -> &OwnerPath {
+        &self.owner
+    }
+
+    pub const fn action(&self) -> &Action {
+        &self.action
+    }
+
+    pub fn reporter(&self) -> i64 {
+        match &self.action {
+            Action::Attack { controller, .. } => *controller,
+            _ => self.actor,
+        }
+    }
+
+    pub fn into_command(self) -> Command {
+        Command::from(self.action)
+    }
 }
 
 #[derive(Clone, Debug, Serialize)]
