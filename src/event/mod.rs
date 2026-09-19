@@ -1,6 +1,9 @@
 mod log;
 
-pub use log::{EventLog, EventRecord};
+pub use log::{
+    AcknowledgeError, DeliveryBatch, DeliveryReceipt, EventCursor, EventInbox, EventLog,
+    EventRecord, ReaderId,
+};
 
 use crate::domain::Pos;
 use crate::rules::time::Phase;

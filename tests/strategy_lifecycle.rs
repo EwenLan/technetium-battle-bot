@@ -1,8 +1,10 @@
 use technetium_battle_bot::ai::strategy;
+use technetium_battle_bot::event::{EventRecord, WorldEvent};
 use technetium_battle_bot::fsm::StrategyState;
 use technetium_battle_bot::protocol::decode;
 use technetium_battle_bot::rules::constants::{
     COUNTER_INCREMENT, DAY_ROUNDS, EMERGENCY_CLEAR_ROUNDS, FIRST_ROUND, NIGHT_ROUNDS, ZERO_COUNTER,
+    ZERO_VERSION,
 };
 
 const NIGHT_REQUEST: &str = include_str!("fixtures/night.json");
@@ -45,4 +47,28 @@ fn emergency_exit_requires_configured_clear_observations() {
     }
     state = strategy::advance(&observation, &[], state, &mut clear);
     assert_ne!(state, StrategyState::Emergency);
+}
+
+#[test]
+fn world_recovery_restarts_emergency_clear_evidence() {
+    let mut observation = decode(NIGHT_REQUEST.as_bytes())
+        .expect("fixture")
+        .observation;
+    observation.robot = None;
+    let mut clear = EMERGENCY_CLEAR_ROUNDS - COUNTER_INCREMENT;
+    let recovery = EventRecord {
+        id: ZERO_VERSION,
+        observed_round: observation.round_no,
+        event: WorldEvent::WorldRecovered,
+    };
+
+    let state = strategy::advance(
+        &observation,
+        &[recovery],
+        StrategyState::Emergency,
+        &mut clear,
+    );
+
+    assert_eq!(state, StrategyState::Emergency);
+    assert_eq!(clear, COUNTER_INCREMENT);
 }

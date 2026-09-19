@@ -12,7 +12,9 @@
 
 ## 实际范围与未完成项
 
-世界的 `ColdStart/Ready/Degraded` 已接入会话：地图尺寸或阵营在同一会话突变时保留最后有效快照、返回空响应，并在一致新帧到来后恢复；生命周期和差分事件进入稳定 ID 的有界日志。`Closed`、按订阅者确认的 inbox 和完整事件路由尚未实现。战略已有阶段选择，个体已有提交动作的简化等待/回执处理；其余 enum 不代表完成的状态机。仲裁选择的动作才会登记为 `WaitingResult`，下一新回合按 `lastRoundRoleActionResults` 生成 Step 级合法、拒绝或未知报告；合法回执不等于实际效果。任务层仍缺 `StrategicDirective`、任务 DAG/租约和完整 `OwnerPath`。仲裁目前允许 `move/collect/sell/build/attack/acceptTask/submitAnswer/use Medicine` 的受限子集。夜间火力是基础贪心，无穿透/溅射结算模型和联合配对。
+世界的 `ColdStart/Ready/Degraded` 已接入会话：地图尺寸或阵营在同一会话突变时保留最后有效快照、返回空响应，并在一致新帧到来后恢复；生命周期和差分事件进入稳定 ID 的有界日志。`EventInbox` 为四个层级读者维护独立 cursor，支持 poll/ack、截断检测和陈旧 receipt 拒绝；战略读者已接入决策草稿，失败草稿不会推进游标。当前没有信封过滤、实例路由和关键截断恢复，其他三层读者也尚未接入调度。
+
+`domain::owner` 已实现类型化 mission/plan/intent ID、generation、`OwnerPath` 与 `ActiveOwners`。构造器拒绝缺 plan 的 intent，注册检查父链和 generation，父代更新会让完整旧路径失效；这些类型尚未替换当前报告中的角色整数 owner，也未接入任务/动作提交。战略已有阶段选择，个体已有提交动作的简化等待/回执处理；其余 enum 不代表完成的状态机。仲裁选择的动作才会登记为 `WaitingResult`，下一新回合按 `lastRoundRoleActionResults` 生成 Step 级合法、拒绝或未知报告；合法回执不等于实际效果。任务层仍缺 `StrategicDirective`、任务 DAG/租约。仲裁目前允许 `move/collect/sell/build/attack/acceptTask/submitAnswer/use Medicine` 的受限子集。夜间火力是基础贪心，无穿透/溅射结算模型和联合配对。
 
 认知仅覆盖单次 prompt/紧邻下一回合结果，尚无每日额度、作业代次、迟到结果墓碑、沙盒、SOP；新闻、宝藏、墙体、采购/升级/拆除与完整回放尚未实现。不能宣称适合正式比赛或达到目标性能。协议空响应、构建目标与启动方式还需官方环境验证。
 
@@ -28,6 +30,8 @@ cargo build --release --locked
 bash run.sh 45731
 curl --noproxy '*' -sS -X POST --data-binary @tests/fixtures/day.json http://127.0.0.1:45731/
 ```
+
+最新阶段已通过 rustfmt、Clippy warnings-as-errors、42 个集成测试、locked release 构建和本机 HTTP 冒烟；新增 8 个测试集中验证事件消费、恢复后滞回重置与 OwnerPath。该结果不代表完整 P2 或官方判题器联调完成。
 
 继续按 PLAN 补齐 P0 的其余正式规则与运行环境证据，再完成 P1 的正式事务/异常服务测试、P2 的世界/FSM/事件上报、P3 的动作与经济闭环、P4 防守、P5 认知、P6 新闻宝藏、P7 全场回放。建造区域 U01 已解决；围墙布局仍须先验证基地出口与操炮通路。每次代码变更按 [AGENTS.md](AGENTS.md) 限制拆分、测试、同步文档并及时提交推送。
 

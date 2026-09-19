@@ -1,6 +1,7 @@
 use std::time::{Duration, Instant};
 
 use crate::ai::{DecisionState, decide, individual};
+use crate::event::{EventCursor, ReaderId};
 use crate::fsm::WorldState;
 use crate::protocol::{decode, empty_response, encode};
 use crate::rules::constants::HTTP_DECISION_TIMEOUT_MS;
@@ -78,8 +79,14 @@ impl Session {
         self.degraded_key = None;
         self.decision.reports = individual::reconcile(&observation, &mut self.decision);
         let mut draft = self.decision.clone();
-        let planned = decide(&observation, &self.world.events, &mut draft, deadline);
-        let encoded = encode(&planned).ok().filter(|_| Instant::now() <= deadline);
+        let delivery = draft
+            .event_inbox
+            .poll(ReaderId::Strategy, &self.world.event_log);
+        let planned = decide(&observation, delivery.records(), &mut draft, deadline);
+        let acknowledged = draft.event_inbox.acknowledge(delivery.receipt()).is_ok();
+        let encoded = encode(&planned)
+            .ok()
+            .filter(|_| acknowledged && Instant::now() <= deadline);
         let committed = encoded.is_some();
         let reply = encoded.unwrap_or_else(empty_response);
         self.last_team = Some(observation.team_our.team_id);
@@ -98,5 +105,9 @@ impl Session {
 
     pub fn event_count(&self) -> usize {
         self.world.event_log.records().count()
+    }
+
+    pub fn event_cursor(&self, reader: ReaderId) -> EventCursor {
+        self.decision.event_inbox.cursor(reader)
     }
 }

@@ -97,7 +97,7 @@
 - `risk(e)=min(SCORE_SCALE, ceil(SCORE_SCALE × THREAT_HORIZON × potential_dps(e) / max(current_hp(e), MIN_POSITIVE_HP)))`。
 - 机器人眩晕剩余回合未给出时，跨窗口预测不扣去整段攻击；“当前眩晕”作为战术优势记录，不能等同未来三回合无风险。
 - 未观察敌人的历史位置只形成额外不确定风险标记；当前范围和路径缓存必须注明哪些值是预测。
-- 连续 EMERGENCY_CLEAR_ROUNDS 个**新观测**回合内，基地风险低于退出阈值、关键角色风险低于退出阈值且防守缺口已消除，才退出 Emergency；重复请求不增加稳定计数。
+- 连续 EMERGENCY_CLEAR_ROUNDS 个**新观测**回合内，基地风险低于退出阈值、关键角色风险低于退出阈值且防守缺口已消除，才退出 Emergency；重复请求不增加稳定计数，`WorldRecovered` 会清零中断前的连续证据并从恢复帧重新累计。
 
 `MIN_POSITIVE_HP` 为分母保护常量；已死对象先被 G04 过滤，不能靠该常量把死者当活人。风险可以保守高估；测得机器人速度/攻击顺序后修改预测模型和参数版本，不改变确认事实。
 

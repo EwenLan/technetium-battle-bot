@@ -5,7 +5,7 @@
 
 ## 1. 接口边界与实现方式
 
-当前源码入口为 `transport::serve(port)` → `runtime::Session::handle(&[u8]) -> Vec<u8>` → `protocol::decode/encode`、`world::World::apply`、`ai::decide`、`command::Arbiter::propose/finish`。`Session` 先持久化观测和上一轮合法性回执，再克隆 `DecisionState` 草稿；新动作仅在编码及截止检查后提交，并缓存同回合同请求结果。尚无正式的 `TurnStamp/OwnerPath`、generation 验证、ResourceCoordinator、层级输出/报告队列或 IF16 回放。当前 `Arbiter::accepted()` 仅向个体层提供本轮已选择动作，`individual::record_committed/reconcile` 用下一回合合法性回执形成 Step 报告；这里的 `ExecutionReport.owner` 暂为角色整数 ID，不是本文目标 `OwnerPath`，也不能把“合法”当作效果确认。现有 `WorldView` 是观测的只读查询封装，不等同于本文完整 WorldSnapshot。接口变更先对照此差距，逐段迁移，不能把目标签名写成已交付 API。
+当前源码入口为 `transport::serve(port)` → `runtime::Session::handle(&[u8]) -> Vec<u8>` → `protocol::decode/encode`、`world::World::apply`、`ai::decide`、`command::Arbiter::propose/finish`。`Session` 先持久化观测和上一轮合法性回执，再克隆 `DecisionState` 草稿；新动作和战略事件游标仅在编码及截止检查后提交，并缓存同回合同请求结果。`domain::OwnerPath/ActiveOwners` 已实现完整父链与 generation 校验，但尚未接入任务、报告和动作；仍无正式 `TurnStamp`、ResourceCoordinator、层级输出/报告队列或 IF16 回放。当前 `Arbiter::accepted()` 仅向个体层提供本轮已选择动作，`individual::record_committed/reconcile` 用下一回合合法性回执形成 Step 报告；这里的 `ExecutionReport.owner` 暂为角色整数 ID，不是目标 `OwnerPath`，也不能把“合法”当作效果确认。现有 `WorldView` 是观测的只读查询封装，不等同于本文完整 WorldSnapshot。接口变更先对照此差距，逐段迁移，不能把目标签名写成已交付 API。
 
 本阶段 `WorldView::task_cells/task_stands/adjacent_task` 将同一任务点的多格 `zones` 合并为交互候选；目前仍采用相邻格交互的保守假设，正式站位语义待 U03 联调。
 
@@ -14,7 +14,7 @@
 | IF01–IF03 | JSON/HTTP、重复键/地图实体与 footprint 边界校验、简化回合缓存与草稿提交；未完成正式事务代次、官方路由验证和结构化日志 |
 | IF04–IF05 | 世界就绪/降级/恢复、有效快照保留、基础差分/记忆、几何/动态建造环、局部动作校验；无完整预测和规则服务 |
 | IF06–IF09 | 直接函数调用、提交后等待及回执报告的简化版；未实现层级消息、任务 DAG、完整个体转移契约 |
-| IF10–IF11 | 事件/状态 enum、稳定 ID 的有界事件日志、有限 Step 报告与类型化回执原因；无按订阅者确认的 inbox/完整路由或通用 FSM 驱动 |
+| IF10–IF11 | 事件/状态 enum、稳定 ID 的有界事件日志、四个层级读者的独立 cursor/poll/ack、截断和陈旧 receipt 检测、有限 Step 报告；无信封过滤/完整路由或通用 FSM 驱动 |
 | IF12–IF14 | 本轮内角色、目标格、金币的基础预约与响应编码；其余资源/动作及回执未覆盖 |
 | IF15–IF16 | 单次 LLM prompt/下一回合答案；无完整作业、沙盒、SOP、遥测/回放 |
 
@@ -90,6 +90,8 @@ enum WorkOwner {
 ```
 
 `OwnerPath` 必须由构造器保证父链完整：有 intent 必有 plan；子节点必须登记在对应父节点下。任务代次失效会使其所有计划/意图失效，计划代次失效只影响该计划。运行时的 `ActiveOwners` 索引提供 `is_current(owner)`，最终校验不能只检查最末级 generation。
+
+当前 `domain::owner` 已交付 `MissionId/PlanId/IntentId/Generation/Versioned/OwnerPath/ActiveOwners`。注册子节点前检查当前父链，同一 ID 只允许严格递增 generation，且不能换父节点；`is_current` 从 mission 开始逐级比对，所以父 generation 更新后旧子链立即失效。ID 分配器、取消清理，以及把 `ExecutionReport`、任务和动作改为携带该类型仍待实现。
 
 行动建议必须精确匹配本轮 `TurnStamp`。跨回合 Mission/Plan 可以保留，但其下一步建议必须基于当前快照重新校验并重新盖 stamp；不能只替换旧建议的 round。已提交动作和作业保存发送时的原 stamp，不能因旧代次失效而删掉真实回执。
 
@@ -386,6 +388,8 @@ fn poll(&self, reader: ReaderId, cursor: EventCursor,
 fn acknowledge(&mut self, reader: ReaderId, receipt: DeliveryReceipt)
     -> Result<(), EventError>;
 ```
+
+当前简化 API 为 `EventInbox::poll(reader, &EventLog) -> DeliveryBatch` 与 `acknowledge(receipt)`：cursor 由 inbox 持有，批次包含有序 `EventRecord` 和截断标志，receipt 起点若不再等于读者当前 cursor 则返回 `StaleReceipt`。新读者从事件 ID 零开始；若最旧保留 ID 已越过 cursor，则必须观察到 `truncated=true`。目前未实现 filter、route、delivery token 和 publish 权限检查。
 
 | 数据 | 必需字段/约束 |
 | --- | --- |

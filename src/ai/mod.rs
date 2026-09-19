@@ -9,7 +9,7 @@ use std::time::Instant;
 
 use crate::command::Arbiter;
 use crate::domain::{Observation, Response};
-use crate::event::WorldEvent;
+use crate::event::{EventInbox, EventRecord};
 use crate::fsm::{IndividualState, MissionState, StrategyState, TacticalState};
 
 #[derive(Clone, Debug)]
@@ -24,6 +24,7 @@ pub struct DecisionState {
     pub emergency_clear: u8,
     pub build_plans: BTreeMap<i64, mission::BuildPlan>,
     pub bad_build_sites: BTreeSet<crate::domain::Pos>,
+    pub event_inbox: EventInbox,
 }
 
 impl Default for DecisionState {
@@ -39,13 +40,14 @@ impl Default for DecisionState {
             emergency_clear: crate::rules::constants::ZERO_COUNTER,
             build_plans: BTreeMap::new(),
             bad_build_sites: BTreeSet::new(),
+            event_inbox: EventInbox::default(),
         }
     }
 }
 
 pub fn decide(
     observation: &Observation,
-    events: &[WorldEvent],
+    events: &[EventRecord],
     state: &mut DecisionState,
     deadline: Instant,
 ) -> Response {

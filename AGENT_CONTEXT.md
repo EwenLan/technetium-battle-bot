@@ -52,7 +52,7 @@ LLM 服务于新闻推理、宝藏线索和自进化任务，通过比赛的 `pr
 
 细化版设计已补充世界生命周期、各层状态行为/转移矩阵、10 类任务流程、类型化事件/上报目录，以及挑战、认知作业、新闻和宝藏子状态机。共用约束包括分阶段有限推进、保存未消费证据、报告作用域、取消代次和终止作业墓碑；动作提出、提交和效果确认分开处理。
 
-目标接口基线为 IF01–IF16，统一 TurnStamp/OwnerPath、任务规范与私有记录、意图/建议/已提交动作、类型化事件、资源租约与认知作业。当前实现仅有简化的 Session 草稿提交、WorldView 与 Arbiter；ResourceCoordinator、共享 decision 模块、正式报告路由与预测仓尚未实现。
+目标接口基线为 IF01–IF16，统一 TurnStamp/OwnerPath、任务规范与私有记录、意图/建议/已提交动作、类型化事件、资源租约与认知作业。当前已实现 OwnerPath/ActiveOwners 的完整父链代际校验，以及简化事件日志的按层 cursor/poll/ack；只有战略读者接入 Session 草稿。ResourceCoordinator、共享 decision 模块、正式信封/报告路由与预测仓尚未实现。
 
 ## 4. 重要事实与待确认项
 
@@ -123,6 +123,14 @@ U01 已解决：用户确认基地 2×2，武器环为周围 4×4 减基地，�
 - 新增带稳定 ID、观测回合和容量上限的 `EventLog`，记录 WorldReady/WorldDegraded/WorldRecovered 及既有差分事件。它尚不是完整的按订阅者 inbox。
 - 新增连续战略阶段、紧急退出滞回、世界降级/恢复、事件顺序/容量测试；P2 的预测仓、OwnerPath、事件确认路由和 Closed 状态仍未完成。
 - 协议边界新增我方/敌方/机器人、任务点及 2×2 基地完整占地检查，越界输入在进入世界模型前拒绝；可选敌方/机器人集合继续允许缺失。
+
+### 2026-09-20：接入事件消费游标与 OwnerPath 校验
+
+- `EventInbox` 为 Strategy/Mission/Tactics/Individual 分别保存下一个事件 ID；poll 返回有序记录和截断标志，ack 以起止 cursor receipt 拒绝陈旧确认，读者互不推进。
+- 战略事件 reader 放入 `DecisionState` 草稿；战略收到 `EventRecord`，只有编码和截止检查成功后才提交 cursor，同轮缓存请求不重复消费；`WorldRecovered` 会重置中断前的紧急退出连续安全证据。
+- `domain::owner` 新增独立 MissionId/PlanId/IntentId、Generation、Versioned、OwnerPath 和 ActiveOwners。intent 必有 plan；注册要求当前父链、严格递增 generation、同一子 ID 不换父，`is_current` 校验完整链。
+- 新增独立测试覆盖多读者、陈旧 receipt、日志截断、会话单次消费、OwnerPath 不变量和父 generation 失效。完整信封、过滤/实例路由、关键截断恢复，以及 owner 接入报告/动作仍待开发。
+- 验证通过：`cargo fmt --check`、Clippy warnings-as-errors、42 个集成测试、`cargo build --release --locked` 和本机 HTTP JSON 冒烟；同时检查本阶段 Rust 文件/函数行数与业务代码数字字面量。
 
 ## 6. 后续记录规范
 

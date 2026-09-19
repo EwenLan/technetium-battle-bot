@@ -1,5 +1,5 @@
 use crate::domain::{Observation, Pos};
-use crate::event::WorldEvent;
+use crate::event::{EventRecord, WorldEvent};
 use crate::fsm::{StrategyState, normal_strategy};
 use crate::rules::constants::{
     BASE_RISK_ENTER, BASE_RISK_EXIT, COUNTER_INCREMENT, EMERGENCY_CLEAR_ROUNDS,
@@ -12,10 +12,11 @@ use crate::rules::time::{next_night, phase};
 
 pub fn advance(
     observation: &Observation,
-    _events: &[WorldEvent],
+    events: &[EventRecord],
     previous: StrategyState,
     clear_count: &mut u8,
 ) -> StrategyState {
+    reset_clear_after_recovery(events, clear_count);
     let Some(current_phase) = phase(observation.round_no) else {
         return previous;
     };
@@ -39,6 +40,15 @@ pub fn advance(
         return_due(observation),
         endgame(observation.round_no),
     )
+}
+
+fn reset_clear_after_recovery(events: &[EventRecord], clear_count: &mut u8) {
+    if events
+        .iter()
+        .any(|record| matches!(&record.event, WorldEvent::WorldRecovered))
+    {
+        *clear_count = ZERO_COUNTER;
+    }
 }
 
 pub fn return_due(observation: &Observation) -> bool {
