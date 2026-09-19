@@ -1,8 +1,15 @@
+mod log;
+
+pub use log::{EventLog, EventRecord};
+
 use crate::domain::Pos;
 use crate::rules::time::Phase;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum WorldEvent {
+    WorldReady,
+    WorldDegraded(WorldIssue),
+    WorldRecovered,
     RoundStarted(i32),
     PhaseChanged(Phase),
     UnitDied(i64),
@@ -19,6 +26,12 @@ pub enum WorldEvent {
     ChallengeStarted,
     ChallengeEnded,
     NewsChanged,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum WorldIssue {
+    MapDimensionsChanged,
+    FactionChanged,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

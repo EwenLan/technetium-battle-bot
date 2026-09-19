@@ -40,15 +40,7 @@ fn validate(observation: &Observation) -> Result<(), DecodeError> {
     let round_valid = (MAP_MIN_SIZE..=MATCH_ROUNDS).contains(&observation.round_no);
     let roles_valid = !observation.team_our.roles.is_empty();
     let team_valid = !observation.team_our.team_id.is_empty();
-    let positions_valid = observation
-        .team_our
-        .roles
-        .iter()
-        .all(|role| in_map(role.pos, map.width, map.height))
-        && map
-            .zones
-            .iter()
-            .all(|zone| in_map(zone.pos, map.width, map.height));
+    let positions_valid = observation_positions_valid(observation);
     let mut ids = std::collections::BTreeSet::new();
     let ids_unique = observation
         .team_our
@@ -69,6 +61,52 @@ fn validate(observation: &Observation) -> Result<(), DecodeError> {
         }
         _ => Err(DecodeError::InvalidWorld),
     }
+}
+
+fn observation_positions_valid(observation: &Observation) -> bool {
+    let map = &observation.map_info;
+    roles_in_map(&observation.team_our.roles, map.width, map.height)
+        && observation
+            .team_enemy
+            .as_ref()
+            .is_none_or(|team| roles_in_map(&team.roles, map.width, map.height))
+        && observation
+            .robot
+            .as_ref()
+            .is_none_or(|team| roles_in_map(&team.roles, map.width, map.height))
+        && observation
+            .team_our
+            .player_tasks
+            .iter()
+            .all(|task| in_map(task.task_position, map.width, map.height))
+        && map
+            .zones
+            .iter()
+            .all(|zone| in_map(zone.pos, map.width, map.height))
+}
+
+fn roles_in_map(roles: &[crate::domain::Role], width: i32, height: i32) -> bool {
+    roles.iter().all(|role| {
+        in_map(role.pos, width, height)
+            && (role.role_type != "station" || station_in_map(role.pos, width, height))
+    })
+}
+
+fn station_in_map(pos: crate::domain::Pos, width: i32, height: i32) -> bool {
+    let Some(right) = pos.x.checked_add(crate::rules::constants::NEIGHBOR_RANGE) else {
+        return false;
+    };
+    let Some(bottom) = pos.y.checked_sub(crate::rules::constants::NEIGHBOR_RANGE) else {
+        return false;
+    };
+    in_map(
+        crate::domain::Pos {
+            x: right,
+            y: bottom,
+        },
+        width,
+        height,
+    )
 }
 
 fn in_map(pos: crate::domain::Pos, width: i32, height: i32) -> bool {

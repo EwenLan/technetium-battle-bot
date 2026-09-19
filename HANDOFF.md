@@ -4,7 +4,7 @@
 
 ## 当前代码与入口
 
-`bash run.sh <port>` 锁定依赖构建 release 二进制并启动 HTTP 服务。服务监听 `0.0.0.0`，接受 POST 请求，`runtime::Session` 串行处理回合；`protocol` 解析/编码 JSON，`world` 记录快照差分和有限记忆，`ai` 选择动作，`command::Arbiter` 统一校验并预约角色、目标格与建造金币。`tests/` 存放独立回归测试和有效协议 fixture。运行依赖为 `serde`、`serde_json`。
+`bash run.sh <port>` 锁定依赖构建 release 二进制并启动 HTTP 服务。服务监听 `0.0.0.0`，接受 POST 请求，`runtime::Session` 串行处理回合；`protocol` 解析/编码 JSON，并校验全部已观测实体、任务点和基地完整 footprint 均在地图内；`world` 记录快照差分和有限记忆，`ai` 选择动作，`command::Arbiter` 统一校验并预约角色、目标格与建造金币。`tests/` 存放独立回归测试和有效协议 fixture。运行依赖为 `serde`、`serde_json`。
 
 当前策略能根据昼夜、返防时间和近似基地风险选择阶段；工人按有效价格采矿/出售，必要时用已有药剂，并在观测基地动态生成的武器环内尝试三类武器建设；开拓者走向可接任务点（同名两格任务点合并寻路/接取邻域）、接题、发送一次 `prompt` 并只在紧随其后的回合提交 `llmResp`；夜间为已有炮选择可用控制者、移动到邻位或对可见机器人开火。A* 使用八邻域与有界扩展。世界记忆区分普通敌人失去视野、已确认死亡及全图可见建筑移除；新闻只保存有界原文，不做语义推理。
 
@@ -12,7 +12,7 @@
 
 ## 实际范围与未完成项
 
-已存在世界、战略、任务、战术、个体状态枚举，但主要只有战略阶段选择和已提交动作的简化等待/回执处理；不得将 enum 当作完成的状态机。仲裁选择的动作才会登记为 `WaitingResult`，下一新回合按 `lastRoundRoleActionResults` 生成 Step 级合法、拒绝或未知报告；拒绝/未知上报给任务/战术的简化状态。合法回执不等于实际效果。任务层当前直接调用战术辅助，缺少 `StrategicDirective`、任务 DAG/租约、完整 `OwnerPath`、事件 inbox 与上报路由。个体缺效果证据对账；世界缺证据化预测与完整实体生命周期。仲裁目前允许 `move/collect/sell/build/attack/acceptTask/submitAnswer/use Medicine` 的受限子集，其他动作虽可编码但不会被批准。夜间火力是基础贪心，无穿透/溅射结算模型和联合配对。
+世界的 `ColdStart/Ready/Degraded` 已接入会话：地图尺寸或阵营在同一会话突变时保留最后有效快照、返回空响应，并在一致新帧到来后恢复；生命周期和差分事件进入稳定 ID 的有界日志。`Closed`、按订阅者确认的 inbox 和完整事件路由尚未实现。战略已有阶段选择，个体已有提交动作的简化等待/回执处理；其余 enum 不代表完成的状态机。仲裁选择的动作才会登记为 `WaitingResult`，下一新回合按 `lastRoundRoleActionResults` 生成 Step 级合法、拒绝或未知报告；合法回执不等于实际效果。任务层仍缺 `StrategicDirective`、任务 DAG/租约和完整 `OwnerPath`。仲裁目前允许 `move/collect/sell/build/attack/acceptTask/submitAnswer/use Medicine` 的受限子集。夜间火力是基础贪心，无穿透/溅射结算模型和联合配对。
 
 认知仅覆盖单次 prompt/紧邻下一回合结果，尚无每日额度、作业代次、迟到结果墓碑、沙盒、SOP；新闻、宝藏、墙体、采购/升级/拆除与完整回放尚未实现。不能宣称适合正式比赛或达到目标性能。协议空响应、构建目标与启动方式还需官方环境验证。
 

@@ -1,25 +1,83 @@
 use std::collections::BTreeMap;
 
 use crate::domain::{Observation, Role};
-use crate::event::WorldEvent;
+use crate::event::{EventLog, WorldEvent, WorldIssue};
+use crate::fsm::WorldState;
 use crate::rules::constants::{NO_COOLDOWN, NO_HEALTH, VERSION_INCREMENT};
 use crate::rules::time::phase;
 use crate::world::memory::WorldMemory;
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct World {
+    pub state: WorldState,
     pub observation: Option<Observation>,
     pub version: u64,
     pub events: Vec<WorldEvent>,
+    pub event_log: EventLog,
     pub memory: WorldMemory,
 }
 
+impl Default for World {
+    fn default() -> Self {
+        Self {
+            state: WorldState::ColdStart,
+            observation: None,
+            version: crate::rules::constants::ZERO_VERSION,
+            events: Vec::new(),
+            event_log: EventLog::default(),
+            memory: WorldMemory::default(),
+        }
+    }
+}
+
 impl World {
-    pub fn apply(&mut self, observation: Observation) {
+    pub fn apply(&mut self, observation: Observation) -> bool {
+        if self.state == WorldState::Closed {
+            return false;
+        }
+        if let Some(issue) = self.continuity_issue(&observation) {
+            self.degrade(observation.round_no, issue);
+            return false;
+        }
+        self.accept(observation);
+        true
+    }
+
+    fn accept(&mut self, observation: Observation) {
+        let lifecycle = match self.state {
+            WorldState::ColdStart => Some(WorldEvent::WorldReady),
+            WorldState::Degraded => Some(WorldEvent::WorldRecovered),
+            WorldState::Ready | WorldState::Closed => None,
+        };
         self.events = build_events(self.observation.as_ref(), &observation);
+        if let Some(event) = lifecycle {
+            self.events
+                .insert(crate::rules::constants::EMPTY_COUNT, event);
+        }
         self.memory.observe(&observation);
+        self.event_log.append(observation.round_no, &self.events);
         self.observation = Some(observation);
         self.version = self.version.saturating_add(VERSION_INCREMENT);
+        self.state = WorldState::Ready;
+    }
+
+    fn degrade(&mut self, round: i32, issue: WorldIssue) {
+        self.state = WorldState::Degraded;
+        self.events = vec![WorldEvent::WorldDegraded(issue)];
+        self.event_log.append(round, &self.events);
+    }
+
+    fn continuity_issue(&self, current: &Observation) -> Option<WorldIssue> {
+        let previous = self.observation.as_ref()?;
+        if previous.map_info.width != current.map_info.width
+            || previous.map_info.height != current.map_info.height
+        {
+            return Some(WorldIssue::MapDimensionsChanged);
+        }
+        if previous.team_our.faction != current.team_our.faction {
+            return Some(WorldIssue::FactionChanged);
+        }
+        None
     }
 }
 

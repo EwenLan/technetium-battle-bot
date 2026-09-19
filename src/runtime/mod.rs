@@ -1,6 +1,7 @@
 use std::time::{Duration, Instant};
 
 use crate::ai::{DecisionState, decide, individual};
+use crate::fsm::WorldState;
 use crate::protocol::{decode, empty_response, encode};
 use crate::rules::constants::HTTP_DECISION_TIMEOUT_MS;
 use crate::world::World;
@@ -12,6 +13,7 @@ pub struct Session {
     last_team: Option<String>,
     last_key: Option<String>,
     last_reply: Vec<u8>,
+    degraded_key: Option<String>,
 }
 
 impl Default for Session {
@@ -29,6 +31,7 @@ impl Session {
             last_team: None,
             last_key: None,
             last_reply: Vec::new(),
+            degraded_key: None,
         }
     }
 
@@ -37,6 +40,12 @@ impl Session {
             return empty_response();
         };
         let round = request.observation.round_no;
+        if self.degraded_key.as_deref() == Some(&request.canonical_key) {
+            return empty_response();
+        }
+        if self.world.state == WorldState::Degraded && self.last_round == Some(round) {
+            return empty_response();
+        }
         if self.last_round == Some(round) {
             return self.same_round(&request.canonical_key);
         }
@@ -62,7 +71,11 @@ impl Session {
 
     fn next_round(&mut self, observation: crate::domain::Observation, key: String) -> Vec<u8> {
         let deadline = Instant::now() + Duration::from_millis(HTTP_DECISION_TIMEOUT_MS);
-        self.world.apply(observation.clone());
+        if !self.world.apply(observation.clone()) {
+            self.degraded_key = Some(key);
+            return empty_response();
+        }
+        self.degraded_key = None;
         self.decision.reports = individual::reconcile(&observation, &mut self.decision);
         let mut draft = self.decision.clone();
         let planned = decide(&observation, &self.world.events, &mut draft, deadline);
@@ -77,5 +90,13 @@ impl Session {
             self.decision = draft;
         }
         reply
+    }
+
+    pub fn world_state(&self) -> WorldState {
+        self.world.state
+    }
+
+    pub fn event_count(&self) -> usize {
+        self.world.event_log.records().count()
     }
 }
