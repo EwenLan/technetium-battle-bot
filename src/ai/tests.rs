@@ -1,6 +1,7 @@
 use super::{DecisionState, propose_owned};
 use crate::command::Arbiter;
 use crate::domain::{Action, MissionSpec, OwnerPath, Pos};
+use crate::fsm::MissionState;
 use crate::protocol::decode;
 
 const DAY_REQUEST: &str = include_str!("../../tests/fixtures/day.json");
@@ -23,20 +24,24 @@ fn rejected_owned_proposal_preserves_existing_work() {
         .expect("worker");
     let mut arbiter = Arbiter::new(&observation);
     let mut state = DecisionState::default();
-    let previous = state.start_work(WORKER_ID).expect("existing work");
+    let previous = accept_move(&observation, &mut state, MissionSpec::economy());
 
     let accepted = propose_owned(
         &mut state,
         &mut arbiter,
         WORKER_ID,
         Action::Move(worker.pos),
-        MissionSpec::economy(),
+        MissionSpec::construction(Pos {
+            x: OTHER_SITE_X,
+            y: OTHER_SITE_Y,
+        }),
     )
     .expect("proposal");
 
     assert!(!accepted);
     assert!(state.active_owners.is_current(&previous));
     assert_eq!(state.role_owners.get(&WORKER_ID), Some(&previous));
+    assert_eq!(mission_state(&state, &previous), MissionState::Executing);
     assert!(
         arbiter
             .finish(&state.active_owners)
@@ -97,6 +102,20 @@ fn successive_steps_reuse_assignment_and_replace_intent() {
 }
 
 #[test]
+fn blocked_assignment_resumes_when_the_next_action_is_accepted() {
+    let observation = decode(DAY_REQUEST.as_bytes()).expect("fixture").observation;
+    let mut state = DecisionState::default();
+    let first = accept_move(&observation, &mut state, MissionSpec::economy());
+    state.block_mission(&first);
+    assert_eq!(mission_state(&state, &first), MissionState::Blocked);
+
+    let second = accept_move(&observation, &mut state, MissionSpec::economy());
+
+    assert_eq!(first.mission(), second.mission());
+    assert_eq!(mission_state(&state, &second), MissionState::Executing);
+}
+
+#[test]
 fn changing_mission_spec_replaces_the_assignment() {
     let observation = decode(DAY_REQUEST.as_bytes()).expect("fixture").observation;
     let mut state = DecisionState::default();
@@ -115,6 +134,11 @@ fn changing_mission_spec_replaces_the_assignment() {
     assert_ne!(economy.plan(), construction.plan());
     assert!(!state.active_owners.is_current(&economy));
     assert!(state.active_owners.is_current(&construction));
+    assert_eq!(mission_state(&state, &economy), MissionState::Cancelled);
+    assert_eq!(
+        mission_state(&state, &construction),
+        MissionState::Executing
+    );
 }
 
 #[test]
@@ -143,6 +167,8 @@ fn changing_objective_replaces_assignment_within_the_same_kind() {
     assert_ne!(first.plan(), second.plan());
     assert!(!state.active_owners.is_current(&first));
     assert!(state.active_owners.is_current(&second));
+    assert_eq!(mission_state(&state, &first), MissionState::Cancelled);
+    assert_eq!(mission_state(&state, &second), MissionState::Executing);
 }
 
 #[test]
@@ -177,4 +203,11 @@ fn accept_move(
             .contains_key(&WORKER_ID.to_string())
     );
     *state.role_owners.get(&WORKER_ID).expect("role owner")
+}
+
+fn mission_state(state: &DecisionState, owner: &OwnerPath) -> MissionState {
+    state
+        .mission_view(owner.mission().id)
+        .expect("mission record")
+        .state()
 }

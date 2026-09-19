@@ -52,7 +52,7 @@ LLM 服务于新闻推理、宝藏线索和自进化任务，通过比赛的 `pr
 
 细化版设计已补充世界生命周期、各层状态行为/转移矩阵、10 类任务流程、类型化事件/上报目录，以及挑战、认知作业、新闻和宝藏子状态机。共用约束包括分阶段有限推进、保存未消费证据、报告作用域、取消代次和终止作业墓碑；动作提出、提交和效果确认分开处理。
 
-目标接口基线为 IF01–IF16，统一 TurnStamp/OwnerPath、任务规范与私有记录、意图/建议/已提交动作、类型化事件、资源租约与认知作业。当前已实现 OwnerPath/ActiveOwners 的完整父链代际校验与失效墓碑、带稳定目标键的简化 MissionSpec assignment、逐步 intent、带 owner 的 ActionProposal、响应编译前复验、等待/Step 报告 owner 贯通，以及简化事件日志的按层 cursor/poll/ack；只有战略读者接入 Session 草稿。ResourceCoordinator、带完整字段的持久任务 DAG、正式提案元数据、共享 decision 模块、正式信封/报告路由与预测仓尚未实现。
+目标接口基线为 IF01–IF16，统一 TurnStamp/OwnerPath、任务规范与私有记录、意图/建议/已提交动作、类型化事件、资源租约与认知作业。当前已实现 OwnerPath/ActiveOwners 的完整父链代际校验与失效墓碑、带稳定目标键和依赖集合的 MissionRegistry、只读 MissionView、基础任务生命周期与取消传播、逐步 intent、带 owner 的 ActionProposal、响应编译前复验、等待/Step 报告 owner 贯通，以及简化事件日志的按层 cursor/poll/ack；只有战略读者接入 Session 草稿。ResourceCoordinator、自动任务 DAG、完整 MissionSpec/Record 字段、正式提案元数据、共享 decision 模块、正式信封/报告路由与预测仓尚未实现。
 
 ## 4. 重要事实与待确认项
 
@@ -163,6 +163,14 @@ U01 已解决：用户确认基地 2×2，武器环为周围 4×4 减基地，�
 - 建设移动与建造动作从同一 BuildPlan 取得目标格，防守移动与攻击从同一武器取得目标 ID；拒绝提案和丢弃草稿的事务规则不变。
 - 当前经济和挑战目标键仍是会话级，spec 不含 owner、goal、依赖、期限、优先级和租约；这些字段与任务 DAG 仍属 P2 后续工作。
 - 验证通过：rustfmt、Clippy warnings-as-errors、57 个 Rust 测试（6 个单元、51 个集成）、locked release 构建、本机 HTTP 200 JSON 冒烟，以及本阶段文件/函数长度和业务代码数字字面量审计。
+
+### 2026-09-20：持久任务注册表与依赖传播
+
+- 新增任务层私有 `MissionRegistry/MissionRecord` 和只读 `MissionView`；记录按 MissionId 持久保存 spec、owner、assignee、状态与依赖，取代 DecisionState 中只按角色保存 assignment 的过渡映射。
+- 注册守卫拒绝未知、自身和不可用前置；前置成功会解锁 Proposed 任务，取消按稳定 MissionId 顺序传播到整个依赖子树，活动任务替换同步失效所有 OwnerPath。
+- 实际动作首次获准时推进 Ready → Assigned → Executing；失败回执同步置 Blocked，下一获准动作恢复 Executing，角色死亡同步取消 registry 任务。`DecisionError` 区分 owner 与 registry 失败并沿用草稿原子回滚。
+- 当前策略仍只创建无依赖任务，且缺少完整 goal、期限、优先级、能力、租约、checkpoint、progress 和完成证据；自动 MissionFactory/AssignmentSolver 仍待 P2/P3。
+- 验证通过：rustfmt、Clippy warnings-as-errors、62 个 Rust 测试（7 个单元、55 个集成）、locked release 构建、本机 HTTP 200 JSON 冒烟，以及本阶段文件/函数长度、分支循环和数字字面量审计。
 
 ## 6. 后续记录规范
 

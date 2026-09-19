@@ -176,6 +176,12 @@ FSM 管理跨回合阶段，效用评分在状态允许的策略中做选择。�
 
 构造器绑定合法 kind/objective 组合，避免调用方构造“建设任务指向武器”等无效身份。目标键来自已选 BuildPlan 或防守武器，保证接近目标与执行动作属于同一任务。代价是经济和挑战暂为会话级粗目标，spec 也尚未包含 owner、goal、依赖、期限、优先级和租约；这些字段随持久任务 DAG 增补，不改变以稳定目标键判断 assignment 延续性的规则。
 
+## D31：任务记录由 MissionRegistry 私有持有并传播依赖结果
+
+**状态：采纳，细化 D05/D26/D29/D30 和 IF07。** `MissionRegistry` 以 MissionId 保存私有 MissionRecord，记录简化 spec、assignment owner、assignee、MissionState 和前置 MissionId；外部只能取得克隆的 MissionView。活动任务另按 assignee 索引，完整 spec 相同才复用父路径。首次动作获准后记录经过 Ready → Assigned → Executing；Blocked 任务在后续动作获准时恢复 Executing。owner 与 registry 错误统一进入 `DecisionError`，任一失败都丢弃整个 Session 决策草稿。
+
+注册拒绝未知、自身或已不可用的前置；任务成功后统一扫描并唤醒所有前置均成功的 Proposed 记录，取消则按 MissionId 稳定顺序传播到依赖子树。成功返回 MissionCompletion，取消/替换返回 MissionCancellation 集合，调用方必须在同一草稿中停用对应 ActiveOwners 父链，因此后代不能继续输出动作。代价是每次成功或取消当前采用小规模全表扫描，但比赛角色和任务规模有限、结果确定；任务规模增长后可增加反向依赖索引。自动 MissionFactory、goal/deadline/priority/lease、失败传播策略和完成证据仍待实现。
+
 ## 变更规则
 
 为新决策分配递增 D 编号，保留旧决策并标记“被 Dxx 替代”，说明触发证据、兼容影响和验证结果；不要抹去仍影响现有实现的假设。规则缺口获得证据后同时更新 DESIGN 的 U 条目及 PLAN 的验收状态。

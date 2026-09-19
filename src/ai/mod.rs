@@ -12,21 +12,34 @@ use std::time::Instant;
 
 use crate::command::Arbiter;
 use crate::domain::{
-    Action, ActionProposal, ActiveOwners, MissionSpec, Observation, OwnerAllocator, OwnerError,
-    OwnerPath, Response,
+    Action, ActionProposal, ActiveOwners, MissionId, MissionSpec, Observation, OwnerAllocator,
+    OwnerError, OwnerPath, Response,
 };
 use crate::event::{EventInbox, EventRecord};
 use crate::fsm::{IndividualState, MissionState, StrategyState, TacticalState};
 
-#[derive(Clone, Copy, Debug)]
-struct RoleAssignment {
-    spec: MissionSpec,
-    owner: OwnerPath,
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DecisionError {
+    Owner(OwnerError),
+    Mission(mission::MissionRegistryError),
+}
+
+impl From<OwnerError> for DecisionError {
+    fn from(error: OwnerError) -> Self {
+        Self::Owner(error)
+    }
+}
+
+impl From<mission::MissionRegistryError> for DecisionError {
+    fn from(error: mission::MissionRegistryError) -> Self {
+        Self::Mission(error)
+    }
 }
 
 struct PreparedAction {
     proposal: ActionProposal,
-    assignment: RoleAssignment,
+    spec: MissionSpec,
+    assignment: OwnerPath,
     replaces_assignment: bool,
 }
 
@@ -46,7 +59,7 @@ pub struct DecisionState {
     pub active_owners: ActiveOwners,
     pub owner_allocator: OwnerAllocator,
     pub role_owners: BTreeMap<i64, OwnerPath>,
-    role_assignments: BTreeMap<i64, RoleAssignment>,
+    mission_registry: mission::MissionRegistry,
 }
 
 impl Default for DecisionState {
@@ -66,7 +79,7 @@ impl Default for DecisionState {
             active_owners: ActiveOwners::default(),
             owner_allocator: OwnerAllocator::default(),
             role_owners: BTreeMap::new(),
-            role_assignments: BTreeMap::new(),
+            mission_registry: mission::MissionRegistry::default(),
         }
     }
 }
@@ -74,8 +87,14 @@ impl Default for DecisionState {
 impl DecisionState {
     pub fn start_work(&mut self, reporter: i64) -> Result<OwnerPath, OwnerError> {
         let owner = self.active_owners.create_path(&mut self.owner_allocator)?;
+        let cancelled = self.mission_registry.cancel_current(reporter);
+        self.apply_cancellations(cancelled);
         self.commit_owner(reporter, owner);
         Ok(owner)
+    }
+
+    pub fn mission_view(&self, mission: MissionId) -> Option<mission::MissionView> {
+        self.mission_registry.view(mission)
     }
 
     fn prepare_action(
@@ -83,11 +102,11 @@ impl DecisionState {
         actor: i64,
         action: Action,
         spec: MissionSpec,
-    ) -> Result<PreparedAction, OwnerError> {
+    ) -> Result<PreparedAction, DecisionError> {
         let reporter = action_reporter(actor, &action);
         let current = self.current_assignment(reporter, spec);
         match current {
-            Some(assignment) => self.prepare_for_assignment(actor, action, assignment),
+            Some(assignment) => self.prepare_for_assignment(actor, action, spec, assignment),
             None => self.prepare_new_assignment(actor, action, spec),
         }
     }
@@ -96,13 +115,15 @@ impl DecisionState {
         &mut self,
         actor: i64,
         action: Action,
-        assignment: RoleAssignment,
-    ) -> Result<PreparedAction, OwnerError> {
+        spec: MissionSpec,
+        assignment: OwnerPath,
+    ) -> Result<PreparedAction, DecisionError> {
         let owner = self
             .active_owners
-            .create_intent(&mut self.owner_allocator, &assignment.owner)?;
+            .create_intent(&mut self.owner_allocator, &assignment)?;
         Ok(PreparedAction {
             proposal: ActionProposal::new(actor, owner, action),
+            spec,
             assignment,
             replaces_assignment: false,
         })
@@ -113,34 +134,42 @@ impl DecisionState {
         actor: i64,
         action: Action,
         spec: MissionSpec,
-    ) -> Result<PreparedAction, OwnerError> {
+    ) -> Result<PreparedAction, DecisionError> {
         let owner = self.active_owners.create_path(&mut self.owner_allocator)?;
-        let assignment = RoleAssignment {
-            spec,
-            owner: owner.assignment(),
-        };
         Ok(PreparedAction {
             proposal: ActionProposal::new(actor, owner, action),
-            assignment,
+            spec,
+            assignment: owner.assignment(),
             replaces_assignment: true,
         })
     }
 
-    fn commit_proposal(&mut self, prepared: &PreparedAction) {
+    fn commit_proposal(&mut self, prepared: &PreparedAction) -> Result<(), DecisionError> {
         let reporter = prepared.proposal.reporter();
         if prepared.replaces_assignment {
-            self.replace_assignment(reporter, prepared.assignment);
-        } else if let Some(previous) = self.role_owners.get(&reporter).copied() {
-            self.deactivate_intent(&previous);
+            let cancelled = self.mission_registry.activate_for_action(
+                reporter,
+                prepared.spec,
+                prepared.assignment,
+            )?;
+            self.apply_cancellations(cancelled);
+        } else {
+            self.mission_registry
+                .resume_for_action(&prepared.assignment)?;
+            if let Some(previous) = self.role_owners.get(&reporter).copied() {
+                self.deactivate_intent(&previous);
+            }
         }
         self.role_owners
             .insert(reporter, *prepared.proposal.owner());
+        self.missions.insert(reporter, MissionState::Executing);
+        Ok(())
     }
 
     fn discard_proposal(&mut self, prepared: &PreparedAction) {
         if prepared.replaces_assignment {
             self.active_owners
-                .deactivate_assignment(&prepared.assignment.owner);
+                .deactivate_assignment(&prepared.assignment);
         } else {
             self.deactivate_intent(prepared.proposal.owner());
         }
@@ -152,24 +181,35 @@ impl DecisionState {
         }
     }
 
-    fn current_assignment(&self, reporter: i64, spec: MissionSpec) -> Option<RoleAssignment> {
-        self.role_assignments
-            .get(&reporter)
-            .copied()
-            .filter(|assignment| {
-                assignment.spec == spec && self.active_owners.is_current(&assignment.owner)
-            })
+    fn current_assignment(&self, reporter: i64, spec: MissionSpec) -> Option<OwnerPath> {
+        self.mission_registry
+            .current_assignment(reporter, spec)
+            .filter(|owner| self.active_owners.is_current(owner))
     }
 
-    fn replace_assignment(&mut self, reporter: i64, assignment: RoleAssignment) {
-        let previous = self
-            .role_assignments
-            .insert(reporter, assignment)
-            .map(|assignment| assignment.owner)
-            .or_else(|| self.role_owners.get(&reporter).copied());
-        if let Some(previous) = previous {
-            self.active_owners.deactivate_assignment(&previous);
+    fn apply_cancellations(&mut self, cancelled: Vec<mission::MissionCancellation>) {
+        for cancellation in cancelled {
+            let assignee = cancellation.assignee();
+            let owner = cancellation.owner();
+            self.active_owners.deactivate_assignment(&owner);
+            if self
+                .role_owners
+                .get(&assignee)
+                .is_some_and(|current| current.mission() == owner.mission())
+            {
+                self.role_owners.remove(&assignee);
+            }
+            self.missions.insert(assignee, MissionState::Cancelled);
         }
+    }
+
+    pub(crate) fn block_mission(&mut self, owner: &OwnerPath) {
+        self.mission_registry.mark_blocked(owner);
+    }
+
+    pub(crate) fn cancel_mission(&mut self, owner: &OwnerPath) {
+        let cancelled = self.mission_registry.cancel_owner(owner);
+        self.apply_cancellations(cancelled);
     }
 
     fn deactivate_intent(&mut self, owner: &OwnerPath) {
@@ -185,10 +225,10 @@ pub(crate) fn propose_owned(
     actor: i64,
     action: Action,
     spec: MissionSpec,
-) -> Result<bool, OwnerError> {
+) -> Result<bool, DecisionError> {
     let prepared = state.prepare_action(actor, action, spec)?;
     if arbiter.propose(&prepared.proposal, &state.active_owners) {
-        state.commit_proposal(&prepared);
+        state.commit_proposal(&prepared)?;
         return Ok(true);
     }
     state.discard_proposal(&prepared);
@@ -207,7 +247,7 @@ pub fn decide(
     events: &[EventRecord],
     state: &mut DecisionState,
     deadline: Instant,
-) -> Result<Response, OwnerError> {
+) -> Result<Response, DecisionError> {
     state.strategy = strategy::advance(
         observation,
         events,

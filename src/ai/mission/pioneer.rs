@@ -1,9 +1,9 @@
 use crate::ai::cognition;
 use crate::ai::mission::economy::{pioneer_max_hp, should_heal};
 use crate::ai::tactics::next_step;
-use crate::ai::{DecisionState, propose_owned};
+use crate::ai::{DecisionError, DecisionState, propose_owned};
 use crate::command::Arbiter;
-use crate::domain::{Action, MissionSpec, Observation, OwnerError, PlayerTask, Role};
+use crate::domain::{Action, MissionSpec, Observation, PlayerTask, Role};
 use crate::rules::constants::{
     ANSWER_MARGIN_ROUNDS, CHALLENGE_SETUP_ROUNDS, NO_COOLDOWN, NO_HEALTH,
 };
@@ -13,7 +13,7 @@ pub fn assign(
     observation: &Observation,
     state: &mut DecisionState,
     arbiter: &mut Arbiter<'_>,
-) -> Result<(), OwnerError> {
+) -> Result<(), DecisionError> {
     let Some(pioneer) = observation
         .team_our
         .roles

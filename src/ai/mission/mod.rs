@@ -1,14 +1,18 @@
 mod construction;
 mod economy;
 mod pioneer;
+mod record;
+mod registry;
 
 pub use construction::BuildPlan;
+pub use record::{MissionCancellation, MissionCompletion, MissionView};
+pub use registry::{MissionRegistry, MissionRegistryError};
 
 use std::time::Instant;
 
-use crate::ai::{DecisionState, propose_owned, tactics};
+use crate::ai::{DecisionError, DecisionState, propose_owned, tactics};
 use crate::command::Arbiter;
-use crate::domain::{Action, MissionSpec, Observation, OwnerError, Role};
+use crate::domain::{Action, MissionSpec, Observation, Role};
 use crate::fsm::{IndividualState, MissionState, StrategyState, TacticalState};
 use crate::rules::time::{Phase, phase};
 
@@ -17,7 +21,7 @@ pub fn assign(
     state: &mut DecisionState,
     arbiter: &mut Arbiter<'_>,
     deadline: Instant,
-) -> Result<(), OwnerError> {
+) -> Result<(), DecisionError> {
     construction::refresh(observation, state);
     let is_night = phase(observation.round_no) == Some(Phase::Night);
     let returning = matches!(
@@ -35,7 +39,7 @@ fn assign_day(
     state: &mut DecisionState,
     arbiter: &mut Arbiter<'_>,
     deadline: Instant,
-) -> Result<(), OwnerError> {
+) -> Result<(), DecisionError> {
     let mut workers: Vec<_> = observation
         .team_our
         .roles
@@ -64,7 +68,7 @@ fn assign_worker(
     worker: &Role,
     state: &mut DecisionState,
     arbiter: &mut Arbiter<'_>,
-) -> Result<(), OwnerError> {
+) -> Result<(), DecisionError> {
     let Some((spec, action)) = worker_selection(observation, worker, state) else {
         return Ok(());
     };

@@ -1,8 +1,8 @@
 use std::collections::BTreeSet;
 
-use crate::ai::{DecisionState, propose_owned};
+use crate::ai::{DecisionError, DecisionState, propose_owned};
 use crate::command::Arbiter;
-use crate::domain::{Action, MissionSpec, Observation, OwnerError, Pos, Role};
+use crate::domain::{Action, MissionSpec, Observation, Pos, Role};
 use crate::rules::constants::{
     DEFAULT_LEVEL, MAX_FIRE_TARGETS, NEIGHBOR_RANGE, NO_COOLDOWN, NO_HEALTH,
 };
@@ -15,7 +15,7 @@ pub fn defend(
     observation: &Observation,
     state: &mut DecisionState,
     arbiter: &mut Arbiter<'_>,
-) -> Result<(), OwnerError> {
+) -> Result<(), DecisionError> {
     let view = WorldView::new(observation);
     let mut available: BTreeSet<i64> = observation
         .team_our

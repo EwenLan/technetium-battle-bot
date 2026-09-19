@@ -98,7 +98,7 @@ fn update_states(state: &mut DecisionState, report: &ExecutionReport) {
         return;
     }
     if report.reason == ReportReason::OwnerDied {
-        update_dead_states(state, report.reporter);
+        update_dead_states(state, report);
         return;
     }
     if report.status == ReportStatus::Progress {
@@ -107,16 +107,20 @@ fn update_states(state: &mut DecisionState, report: &ExecutionReport) {
             .insert(report.reporter, IndividualState::Idle);
         return;
     }
-    update_recovery_states(state, report.reporter);
+    update_recovery_states(state, report);
 }
 
-fn update_dead_states(state: &mut DecisionState, reporter: i64) {
+fn update_dead_states(state: &mut DecisionState, report: &ExecutionReport) {
+    let reporter = report.reporter;
+    state.cancel_mission(&report.owner);
     state.individuals.insert(reporter, IndividualState::Dead);
     state.missions.insert(reporter, MissionState::Cancelled);
     state.tactics.insert(reporter, TacticalState::Cancelled);
 }
 
-fn update_recovery_states(state: &mut DecisionState, reporter: i64) {
+fn update_recovery_states(state: &mut DecisionState, report: &ExecutionReport) {
+    let reporter = report.reporter;
+    state.block_mission(&report.owner);
     state
         .individuals
         .insert(reporter, IndividualState::Recovering);
