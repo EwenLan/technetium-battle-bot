@@ -52,7 +52,7 @@ LLM 服务于新闻推理、宝藏线索和自进化任务，通过比赛的 `pr
 
 细化版设计已补充世界生命周期、各层状态行为/转移矩阵、10 类任务流程、类型化事件/上报目录，以及挑战、认知作业、新闻和宝藏子状态机。共用约束包括分阶段有限推进、保存未消费证据、报告作用域、取消代次和终止作业墓碑；动作提出、提交和效果确认分开处理。
 
-目标接口基线为 IF01–IF16，统一 TurnStamp/OwnerPath、任务规范与私有记录、意图/建议/已提交动作、类型化事件、资源租约与认知作业。当前已实现 OwnerPath/ActiveOwners 的完整父链代际校验，以及简化事件日志的按层 cursor/poll/ack；只有战略读者接入 Session 草稿。ResourceCoordinator、共享 decision 模块、正式信封/报告路由与预测仓尚未实现。
+目标接口基线为 IF01–IF16，统一 TurnStamp/OwnerPath、任务规范与私有记录、意图/建议/已提交动作、类型化事件、资源租约与认知作业。当前已实现 OwnerPath/ActiveOwners 的完整父链代际校验，已接受动作/等待记录/Step 报告的 owner 贯通，以及简化事件日志的按层 cursor/poll/ack；只有战略读者接入 Session 草稿。ResourceCoordinator、持久任务 DAG、ActionProposal owner、共享 decision 模块、正式信封/报告路由与预测仓尚未实现。
 
 ## 4. 重要事实与待确认项
 
@@ -131,6 +131,14 @@ U01 已解决：用户确认基地 2×2，武器环为周围 4×4 减基地，�
 - `domain::owner` 新增独立 MissionId/PlanId/IntentId、Generation、Versioned、OwnerPath 和 ActiveOwners。intent 必有 plan；注册要求当前父链、严格递增 generation、同一子 ID 不换父，`is_current` 校验完整链。
 - 新增独立测试覆盖多读者、陈旧 receipt、日志截断、会话单次消费、OwnerPath 不变量和父 generation 失效。完整信封、过滤/实例路由、关键截断恢复，以及 owner 接入报告/动作仍待开发。
 - 验证通过：`cargo fmt --check`、Clippy warnings-as-errors、42 个集成测试、`cargo build --release --locked` 和本机 HTTP JSON 冒烟；同时检查本阶段 Rust 文件/函数行数与业务代码数字字面量。
+
+### 2026-09-20：将 OwnerPath 接入动作等待与执行报告
+
+- 决策草稿新增确定性 OwnerAllocator、活动 owner 索引和角色当前 owner；每个实际接受动作获得 mission/plan/intent 完整路径，分配失败令决策返回错误，不提交部分草稿。
+- PendingAction 与 ExecutionReport 保存同一 OwnerPath；ReportScope::Step 携带具体 IntentId，另存 reporter 以区分武器 actor 与操控角色。
+- 对账先保留旧 owner 的合法/拒绝/死亡/未知事实，再检查完整父链；替代工作已撤销旧 mission 时，迟到报告不修改新工作的角色/战术/任务状态。
+- 当前是每个提交动作创建一条过渡任务链；持久任务 DAG、assignment owner、ActionProposal/最终提交复验和完整报告字段仍待开发。
+- 验证通过：rustfmt、Clippy warnings-as-errors、44 个集成测试、locked release 构建、本机 HTTP JSON 冒烟，以及本阶段文件/函数长度和业务代码数字字面量审计。
 
 ## 6. 后续记录规范
 

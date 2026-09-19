@@ -96,6 +96,8 @@ pub enum OwnerError {
     PlanNotCurrent,
     GenerationNotAdvanced,
     ParentChanged,
+    IdSpaceExhausted,
+    IdAlreadyRegistered,
 }
 
 impl OwnerPath {
@@ -146,7 +148,64 @@ pub struct ActiveOwners {
     intents: BTreeMap<IntentId, IntentRegistration>,
 }
 
+#[derive(Clone, Debug)]
+pub struct OwnerAllocator {
+    next_id: u64,
+}
+
+impl Default for OwnerAllocator {
+    fn default() -> Self {
+        Self {
+            next_id: ZERO_VERSION,
+        }
+    }
+}
+
+impl OwnerAllocator {
+    fn allocate(&mut self) -> Result<u64, OwnerError> {
+        let allocated = self.next_id;
+        let next = allocated
+            .checked_add(VERSION_INCREMENT)
+            .ok_or(OwnerError::IdSpaceExhausted)?;
+        self.next_id = next;
+        Ok(allocated)
+    }
+}
+
 impl ActiveOwners {
+    pub fn create_path(&mut self, allocator: &mut OwnerAllocator) -> Result<OwnerPath, OwnerError> {
+        let id = allocator.allocate()?;
+        let generation = Generation::initial();
+        let mission = Versioned::new(MissionId::new(id), generation);
+        let plan = Versioned::new(PlanId::new(id), generation);
+        let intent = Versioned::new(IntentId::new(id), generation);
+        if self.missions.contains_key(&mission.id)
+            || self.plans.contains_key(&plan.id)
+            || self.intents.contains_key(&intent.id)
+        {
+            return Err(OwnerError::IdAlreadyRegistered);
+        }
+        self.missions.insert(mission.id, generation);
+        self.plans.insert(
+            plan.id,
+            PlanRegistration {
+                mission,
+                generation,
+            },
+        );
+        self.intents
+            .insert(intent.id, IntentRegistration { plan, generation });
+        Ok(OwnerPath {
+            mission,
+            plan: Some(plan),
+            intent: Some(intent),
+        })
+    }
+
+    pub fn deactivate_mission(&mut self, mission: MissionId) -> bool {
+        self.missions.remove(&mission).is_some()
+    }
+
     pub fn activate_mission(&mut self, mission: Versioned<MissionId>) -> Result<(), OwnerError> {
         validate_generation(self.missions.get(&mission.id).copied(), mission.generation)?;
         self.missions.insert(mission.id, mission.generation);

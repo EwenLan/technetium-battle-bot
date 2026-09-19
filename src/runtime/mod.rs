@@ -83,9 +83,11 @@ impl Session {
             .event_inbox
             .poll(ReaderId::Strategy, &self.world.event_log);
         let planned = decide(&observation, delivery.records(), &mut draft, deadline);
-        let acknowledged = draft.event_inbox.acknowledge(delivery.receipt()).is_ok();
-        let encoded = encode(&planned)
+        let planned_ok = planned.is_ok();
+        let acknowledged = planned_ok && draft.event_inbox.acknowledge(delivery.receipt()).is_ok();
+        let encoded = planned
             .ok()
+            .and_then(|response| encode(&response).ok())
             .filter(|_| acknowledged && Instant::now() <= deadline);
         let committed = encoded.is_some();
         let reply = encoded.unwrap_or_else(empty_response);

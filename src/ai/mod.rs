@@ -8,7 +8,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::time::Instant;
 
 use crate::command::Arbiter;
-use crate::domain::{Observation, Response};
+use crate::domain::{ActiveOwners, Observation, OwnerAllocator, OwnerError, OwnerPath, Response};
 use crate::event::{EventInbox, EventRecord};
 use crate::fsm::{IndividualState, MissionState, StrategyState, TacticalState};
 
@@ -25,6 +25,9 @@ pub struct DecisionState {
     pub build_plans: BTreeMap<i64, mission::BuildPlan>,
     pub bad_build_sites: BTreeSet<crate::domain::Pos>,
     pub event_inbox: EventInbox,
+    pub active_owners: ActiveOwners,
+    pub owner_allocator: OwnerAllocator,
+    pub role_owners: BTreeMap<i64, OwnerPath>,
 }
 
 impl Default for DecisionState {
@@ -41,7 +44,20 @@ impl Default for DecisionState {
             build_plans: BTreeMap::new(),
             bad_build_sites: BTreeSet::new(),
             event_inbox: EventInbox::default(),
+            active_owners: ActiveOwners::default(),
+            owner_allocator: OwnerAllocator::default(),
+            role_owners: BTreeMap::new(),
         }
+    }
+}
+
+impl DecisionState {
+    pub fn start_work(&mut self, reporter: i64) -> Result<OwnerPath, OwnerError> {
+        let owner = self.active_owners.create_path(&mut self.owner_allocator)?;
+        if let Some(previous) = self.role_owners.insert(reporter, owner) {
+            self.active_owners.deactivate_mission(previous.mission().id);
+        }
+        Ok(owner)
     }
 }
 
@@ -50,7 +66,7 @@ pub fn decide(
     events: &[EventRecord],
     state: &mut DecisionState,
     deadline: Instant,
-) -> Response {
+) -> Result<Response, OwnerError> {
     state.strategy = strategy::advance(
         observation,
         events,
@@ -59,8 +75,8 @@ pub fn decide(
     );
     let mut arbiter = Arbiter::new(observation);
     mission::assign(observation, state, &mut arbiter, deadline);
-    individual::record_committed(observation.round_no, arbiter.accepted(), state);
+    individual::record_committed(observation.round_no, arbiter.accepted(), state)?;
     let mut response = arbiter.finish();
     response.prompt = cognition::prepare_prompt(observation, &mut state.challenge);
-    response
+    Ok(response)
 }

@@ -5,7 +5,7 @@ pub use log::{
     EventRecord, ReaderId,
 };
 
-use crate::domain::Pos;
+use crate::domain::{IntentId, MissionId, OwnerPath, PlanId, Pos, Versioned};
 use crate::rules::time::Phase;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -39,9 +39,9 @@ pub enum WorldIssue {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ReportScope {
-    Step,
-    Plan,
-    Mission,
+    Step(Versioned<IntentId>),
+    Plan(Versioned<PlanId>),
+    Mission(Versioned<MissionId>),
     Strategy,
 }
 
@@ -67,7 +67,8 @@ pub enum ReportReason {
 pub struct ExecutionReport {
     pub scope: ReportScope,
     pub status: ReportStatus,
-    pub owner: i64,
+    pub owner: OwnerPath,
+    pub reporter: i64,
     pub reason: ReportReason,
     pub observed_round: i32,
 }

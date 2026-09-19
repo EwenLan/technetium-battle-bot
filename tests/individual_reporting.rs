@@ -2,7 +2,7 @@ use technetium_battle_bot::ai::DecisionState;
 use technetium_battle_bot::ai::individual::{reconcile, record_committed};
 use technetium_battle_bot::command::Arbiter;
 use technetium_battle_bot::domain::{Action, Pos};
-use technetium_battle_bot::event::{ReportReason, ReportStatus};
+use technetium_battle_bot::event::{ReportReason, ReportScope, ReportStatus};
 use technetium_battle_bot::fsm::{IndividualState, MissionState, TacticalState};
 use technetium_battle_bot::protocol::decode;
 use technetium_battle_bot::rules::constants::MIN_ACTION_ROUNDS;
@@ -26,9 +26,11 @@ fn rejected_action_does_not_enter_waiting_state() {
     let mut arbiter = Arbiter::new(&observation);
     assert!(!arbiter.propose(WORKER_ID, Action::Move(worker.pos)));
     let mut state = DecisionState::default();
-    record_committed(observation.round_no, arbiter.accepted(), &mut state);
+    record_committed(observation.round_no, arbiter.accepted(), &mut state)
+        .expect("owner allocation");
     assert!(state.pending_actions.is_empty());
     assert!(!state.individuals.contains_key(&WORKER_ID));
+    assert!(!state.role_owners.contains_key(&WORKER_ID));
 }
 
 #[test]
@@ -43,7 +45,8 @@ fn rejected_by_judger_action_reports_failure_to_parent_states() {
         })
     ));
     let mut state = DecisionState::default();
-    record_committed(observation.round_no, arbiter.accepted(), &mut state);
+    record_committed(observation.round_no, arbiter.accepted(), &mut state)
+        .expect("owner allocation");
     assert_eq!(
         state.individuals.get(&WORKER_ID),
         Some(&IndividualState::WaitingResult)
@@ -57,14 +60,14 @@ fn rejected_by_judger_action_reports_failure_to_parent_states() {
         reports.len(),
         technetium_battle_bot::rules::constants::SINGLE_ITEM
     );
+    let report = reports.first().expect("report");
+    assert_eq!(report.status, ReportStatus::Failed);
+    assert_eq!(report.reason, ReportReason::ActionRejected);
     assert_eq!(
-        reports.first().expect("report").status,
-        ReportStatus::Failed
+        report.scope,
+        ReportScope::Step(report.owner.intent().expect("intent"))
     );
-    assert_eq!(
-        reports.first().expect("report").reason,
-        ReportReason::ActionRejected
-    );
+    assert!(state.active_owners.is_current(&report.owner));
     assert_eq!(
         state.individuals.get(&WORKER_ID),
         Some(&IndividualState::Recovering)
@@ -95,13 +98,14 @@ fn weapon_feedback_is_attributed_to_its_controller() {
         }
     ));
     let mut state = DecisionState::default();
-    record_committed(observation.round_no, arbiter.accepted(), &mut state);
+    record_committed(observation.round_no, arbiter.accepted(), &mut state)
+        .expect("owner allocation");
     observation.round_no += MIN_ACTION_ROUNDS;
     observation
         .last_round_role_action_results
         .insert(WEAPON_ID.to_string(), true);
     let reports = reconcile(&observation, &mut state);
-    assert_eq!(reports.first().expect("report").owner, WORKER_ID);
+    assert_eq!(reports.first().expect("report").reporter, WORKER_ID);
     assert_eq!(
         reports.first().expect("report").status,
         ReportStatus::Progress
@@ -124,7 +128,8 @@ fn skipped_round_feedback_is_not_attributed_to_old_action() {
         x: MOVE_X,
         y: MOVE_Y,
     });
-    record_committed(observation.round_no, &[(WORKER_ID, action)], &mut state);
+    record_committed(observation.round_no, &[(WORKER_ID, action)], &mut state)
+        .expect("owner allocation");
     observation.round_no += MIN_ACTION_ROUNDS + MIN_ACTION_ROUNDS;
     observation
         .last_round_role_action_results
@@ -137,5 +142,41 @@ fn skipped_round_feedback_is_not_attributed_to_old_action() {
     assert_eq!(
         reports.first().expect("report").reason,
         ReportReason::ActionResultUnknown
+    );
+}
+
+#[test]
+fn stale_owner_report_is_kept_without_advancing_replacement_work() {
+    let mut observation = decode(DAY_REQUEST.as_bytes()).expect("fixture").observation;
+    let mut state = DecisionState::default();
+    let action = Action::Move(Pos {
+        x: MOVE_X,
+        y: MOVE_Y,
+    });
+    record_committed(observation.round_no, &[(WORKER_ID, action)], &mut state)
+        .expect("owner allocation");
+    let old_owner = state
+        .pending_actions
+        .get(&WORKER_ID)
+        .expect("pending action")
+        .owner;
+    state.start_work(WORKER_ID).expect("replacement work");
+    state.individuals.insert(WORKER_ID, IndividualState::Moving);
+
+    observation.round_no += MIN_ACTION_ROUNDS;
+    observation
+        .last_round_role_action_results
+        .insert(WORKER_ID.to_string(), false);
+    let reports = reconcile(&observation, &mut state);
+
+    assert_eq!(reports.first().expect("report").owner, old_owner);
+    assert!(!state.active_owners.is_current(&old_owner));
+    assert_eq!(
+        state.individuals.get(&WORKER_ID),
+        Some(&IndividualState::Moving)
+    );
+    assert_eq!(
+        reports.first().expect("report").status,
+        ReportStatus::Failed
     );
 }

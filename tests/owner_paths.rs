@@ -1,5 +1,6 @@
 use technetium_battle_bot::domain::{
-    ActiveOwners, Generation, IntentId, MissionId, OwnerError, OwnerPath, PlanId, Versioned,
+    ActiveOwners, Generation, IntentId, MissionId, OwnerAllocator, OwnerError, OwnerPath, PlanId,
+    Versioned,
 };
 
 const MISSION_KEY: u64 = 11;
@@ -73,6 +74,19 @@ fn registration_rejects_stale_parents_and_reused_children() {
             .activate_plan(advanced_mission, versioned_plan(NEXT_PLAN_KEY, initial))
             .is_ok()
     );
+}
+
+#[test]
+fn allocator_creates_distinct_current_owner_paths() {
+    let mut owners = ActiveOwners::default();
+    let mut allocator = OwnerAllocator::default();
+
+    let first = owners.create_path(&mut allocator).expect("first path");
+    let second = owners.create_path(&mut allocator).expect("second path");
+
+    assert_ne!(first.mission().id, second.mission().id);
+    assert!(owners.is_current(&first));
+    assert!(owners.is_current(&second));
 }
 
 fn versioned_mission(generation: Generation) -> Versioned<MissionId> {
