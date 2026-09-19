@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::domain::{MissionId, MissionSpec, OwnerPath};
+use crate::domain::{Action, GoalPredicate, MissionId, MissionSpec, OwnerPath};
 use crate::fsm::MissionState;
 
 use super::record::{MissionCancellation, MissionCompletion, MissionRecord, MissionView};
@@ -19,8 +19,8 @@ pub enum MissionRegistryError {
 
 #[derive(Clone, Debug, Default)]
 pub struct MissionRegistry {
-    records: BTreeMap<MissionId, MissionRecord>,
-    active_by_assignee: BTreeMap<i64, MissionId>,
+    pub(super) records: BTreeMap<MissionId, MissionRecord>,
+    pub(super) active_by_assignee: BTreeMap<i64, MissionId>,
 }
 
 impl MissionRegistry {
@@ -44,6 +44,8 @@ impl MissionRegistry {
                 owner,
                 assignee,
                 state,
+                completion_evidence: Vec::new(),
+                goal_submission_round: None,
             },
         );
         Ok(mission)
@@ -153,6 +155,26 @@ impl MissionRegistry {
         true
     }
 
+    pub(crate) fn record_action_commit(
+        &mut self,
+        owner: &OwnerPath,
+        actor: i64,
+        action: &Action,
+        round: i32,
+    ) -> bool {
+        let Some(record) = self.records.get_mut(&owner.mission().id) else {
+            return false;
+        };
+        if record.owner != owner.assignment()
+            || !is_active(record.state)
+            || !action_submits_goal(record.spec.goal(), actor, action)
+        {
+            return false;
+        }
+        record.goal_submission_round.get_or_insert(round);
+        true
+    }
+
     pub(crate) fn resume_for_action(
         &mut self,
         owner: &OwnerPath,
@@ -241,7 +263,7 @@ impl MissionRegistry {
         Ok(())
     }
 
-    fn wake_ready(&mut self) -> Vec<MissionId> {
+    pub(super) fn wake_ready(&mut self) -> Vec<MissionId> {
         let ready: Vec<_> = self
             .records
             .iter()
@@ -295,7 +317,7 @@ impl MissionRegistry {
         cancelled
     }
 
-    fn cancellation_ids(&self, root: MissionId) -> Vec<MissionId> {
+    pub(super) fn cancellation_ids(&self, root: MissionId) -> Vec<MissionId> {
         let mut pending = BTreeSet::from([root]);
         let mut found = BTreeSet::new();
         while let Some(mission) = pending.pop_first() {
@@ -309,10 +331,24 @@ impl MissionRegistry {
         found.into_iter().collect()
     }
 
-    fn remove_active(&mut self, assignee: i64, mission: MissionId) {
+    pub(super) fn remove_active(&mut self, assignee: i64, mission: MissionId) {
         if self.active_by_assignee.get(&assignee) == Some(&mission) {
             self.active_by_assignee.remove(&assignee);
         }
+    }
+}
+
+fn action_submits_goal(goal: &GoalPredicate, actor: i64, action: &Action) -> bool {
+    match (goal, action) {
+        (GoalPredicate::EconomyCycleCompleted, Action::Sell { .. }) => true,
+        (GoalPredicate::BuildingPresent { kind, site }, Action::Build { name, pos }) => {
+            kind == name && site == pos
+        }
+        (GoalPredicate::ChallengeResolved, Action::SubmitAnswer(_)) => true,
+        (GoalPredicate::DefenseWindowCompleted { weapon }, Action::Attack { .. }) => {
+            *weapon == actor
+        }
+        _ => false,
     }
 }
 
@@ -350,7 +386,7 @@ fn dependency_unavailable(state: MissionState) -> bool {
     )
 }
 
-fn is_terminal(state: MissionState) -> bool {
+pub(super) fn is_terminal(state: MissionState) -> bool {
     matches!(
         state,
         MissionState::Succeeded

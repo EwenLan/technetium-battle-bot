@@ -32,6 +32,7 @@
 - [x] 建立按角色和简化 MissionSpec 复用的 assignment；建造格与武器 ID 作为稳定目标键，完整 spec 相同时保持 mission/plan，每个新步骤分配 intent，目标替换和拒绝按层失效。
 - [x] 建立持久 MissionRegistry 与只读 MissionView；实现 Proposed/Ready/Assigned/Executing/Blocked/Succeeded/Cancelled 基础转移、前置成功解锁、取消子树传播和活动任务替换。
 - [x] 将 GoalPredicate、依赖、所需能力、MissionDeadline、Q0–Q4 优先级、可中断性和 RetryPolicy 纳入不可变 MissionSpec；registry 以完整契约判断复用并直接读取唯一依赖集合。
+- [x] 将建设实体、挑战结束与白昼切换事件求值为带来源回合的 goal 证据；完成任务自动解锁依赖，期限失败进入 Expired 并取消后代，按时目标动作可满足 ActionSubmission checkpoint。
 - [x] 连续帧验证 `DayDevelop → PrepareNight → NightDefend → DayDevelop`，并覆盖紧急态退出滞回。
 - [x] 协议校验覆盖我方/敌方/机器人、任务点和基地完整 2×2 footprint，越界帧不进入世界模型。
 - [ ] 完成正式四层/世界 FSM、事件上报闭环、全部 12 类动作、认知作业与新闻/宝藏算法。
@@ -72,7 +73,7 @@
 - [ ] 建立观测事实、历史记忆、预测三种数据及显式来源/有效期。
 - [ ] 实现世界差分、昼夜时钟、死亡/复活、冷却和新闻事件。
 - [ ] 实现四层 enum 状态机的共用转移契约、分阶段投递与上报汇总。
-- [ ] 在已有完整基础 MissionSpec 和依赖传播上补齐自动任务分解、goal 证据求值、能力过滤、deadline 驱动、租约、checkpoint、progress、完成证据、超时归档、去重和有限重规划；当前实时策略仍使用无依赖/无 deadline 的默认契约。
+- [ ] 在已有 MissionSpec、依赖传播、基础 goal/deadline 对账上补齐自动任务分解、经济周期证据、能力过滤、自动 deadline 生成、租约、完整 checkpoint/progress、超时归档、去重和有限重规划；当前实时策略仍使用无依赖/无 deadline 的默认契约。
 - [ ] 在已有世界降级和按层 cursor/poll/ack 基础上，实现实例路由 inbox、关键截断恢复、guard 与转移预算；事件证据保存后才推进消费游标。
 - [ ] 按 DESIGN 第 7 节实现类型化事件/报告，覆盖生产者、payload、路由、scope、优先级和有效期。
 - [ ] 建立 `decision/` 共用上下文，完成 IF04/IF05/IF10/IF11 的信封、过滤、路由和 FSM 驱动；把已实现的 OwnerPath 校验放入所有提交边界，禁止跨层写状态。

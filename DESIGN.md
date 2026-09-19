@@ -488,7 +488,9 @@ stateDiagram-v2
 
 当前垂直切片由 `MissionRegistry` 按 MissionId 保存私有 MissionRecord，并以 reporter 索引活动任务，对外只返回 MissionView。不可变 MissionSpec 包含 kind、objective、GoalPredicate、前置 MissionId、required capabilities、MissionDeadline、Q0–Q4 PriorityClass、Interruptibility 和 RetryPolicy；建设目标把建筑类型和坐标同时写入目标谓词。依赖只存一份在 spec 中，注册时未知、自依赖或已不可用的前置会被拒绝；全部前置成功后 Proposed 进入 Ready，任务成功会唤醒所有前置均满足的待命者，取消会确定性传播到依赖子树。活动任务依次经过 Ready → Assigned → Executing；动作失败置 Blocked，下一次获准动作恢复 Executing。
 
-经济循环与挑战会话使用固定目标键，建设使用建造格，守备用武器 ID；只有完整 spec 相同的后续动作才复用 mission/plan 并创建新 intent，因而 deadline、priority 或策略改变也会建立新 assignment。新任务获准后才取消旧任务及依赖后代，取消结果同时失效 ActiveOwners 父链。仲裁接收及编译响应时均调用 `ActiveOwners::is_current`，`PendingAction` 和下一帧 `ExecutionReport` 复用动作路径。当前构造器只为已有四类任务填充默认契约，自动策略尚未创建依赖/deadline，也未求值 goal 或按能力过滤；租约、checkpoint、progress、完成证据、MissionFactory、AssignmentSolver 和 ResourceCoordinator 仍待实现。
+每轮决策先对活动任务求值。`GoalEvidence` 保存观测实体或稳定事件 ID 及来源回合：建设检查指定格的存活己方建筑，挑战结束和守备窗口分别要求 `ChallengeEnded` 与进入白昼的 `PhaseChanged`，`AllOf` 要求全部子目标满足；经济循环在没有采集/出售 checkpoint 前保持 Pending。Succeeded 保存去重证据并解锁依赖。EffectObservation/InternalPlanning 的证据必须落在 deadline 窗口内；ActionSubmission 只把匹配目标的 Sell/Build/SubmitAnswer/Attack 记作 checkpoint，按时提交后允许效果迟到。窗口已错过且无有效提交时根任务 Expired、依赖后代 Cancelled，对应 ActiveOwners 同步失效，迟到证据不复活终态。
+
+经济循环与挑战会话使用固定目标键，建设使用建造格，守备用武器 ID；只有完整 spec 相同的后续动作才复用 mission/plan 并创建新 intent，因而 deadline、priority 或策略改变也会建立新 assignment。新任务获准后才取消旧任务及依赖后代，取消结果同时失效 ActiveOwners 父链。仲裁接收及编译响应时均调用 `ActiveOwners::is_current`，`PendingAction` 和下一帧 `ExecutionReport` 复用动作路径。当前自动策略仍未创建依赖/deadline，也未按 required capabilities 过滤；租约、完整 checkpoint/progress、MissionFactory、AssignmentSolver 和 ResourceCoordinator 仍待实现。
 
 | status / reason 示例 | 产生时机与证据 | 父层需要做什么 |
 | --- | --- | --- |

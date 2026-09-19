@@ -1,6 +1,6 @@
 use super::{DecisionState, propose_owned};
 use crate::command::Arbiter;
-use crate::domain::{Action, MissionSpec, OwnerPath, Pos};
+use crate::domain::{Action, DeadlineKind, MissionDeadline, MissionSpec, OwnerPath, Pos, Role};
 use crate::fsm::MissionState;
 use crate::protocol::decode;
 
@@ -13,6 +13,9 @@ const MOVE_Y: i32 = 4;
 const OTHER_SITE_X: i32 = 5;
 const OTHER_SITE_Y: i32 = 4;
 const BUILDING_KIND: &str = "gatling";
+const BUILDING_ID: i64 = 90;
+const BUILDING_HP: i32 = 1000;
+const NEXT_ROUND: i32 = 2;
 
 #[test]
 fn rejected_owned_proposal_preserves_existing_work() {
@@ -195,6 +198,86 @@ fn discarded_draft_does_not_advance_persistent_owner_ids() {
     let committed_owner = accept_move(&observation, &mut committed, MissionSpec::economy());
 
     assert_eq!(discarded_owner, committed_owner);
+}
+
+#[test]
+fn mission_reconciliation_deactivates_a_completed_assignment() {
+    let mut observation = decode(DAY_REQUEST.as_bytes()).expect("fixture").observation;
+    let mut state = DecisionState::default();
+    let site = Pos {
+        x: MOVE_X,
+        y: MOVE_Y,
+    };
+    let owner = accept_move(
+        &observation,
+        &mut state,
+        MissionSpec::construction(site, BUILDING_KIND),
+    );
+    observation.team_our.roles.push(Role {
+        id: BUILDING_ID,
+        pos: site,
+        role_type: BUILDING_KIND.to_owned(),
+        health: Some(BUILDING_HP),
+        attack_power: None,
+        attack_range: None,
+        back_pack_capability: None,
+        backpack: Vec::new(),
+        level: None,
+        cooldown: None,
+    });
+
+    state.reconcile_missions(&observation, &[]);
+
+    assert_eq!(mission_state(&state, &owner), MissionState::Succeeded);
+    assert!(!state.active_owners.is_current(&owner));
+    assert!(!state.role_owners.contains_key(&WORKER_ID));
+}
+
+#[test]
+fn timely_action_submission_keeps_the_mission_open_for_effects() {
+    let mut observation = decode(DAY_REQUEST.as_bytes()).expect("fixture").observation;
+    let mut state = DecisionState::default();
+    let deadline = MissionDeadline::new(observation.round_no, true, DeadlineKind::ActionSubmission);
+    let site = Pos {
+        x: MOVE_X,
+        y: MOVE_Y,
+    };
+    let action = Action::Build {
+        name: BUILDING_KIND.to_owned(),
+        pos: site,
+    };
+    let mut arbiter = Arbiter::new(&observation);
+    assert!(
+        propose_owned(
+            &mut state,
+            &mut arbiter,
+            WORKER_ID,
+            action,
+            MissionSpec::construction(site, BUILDING_KIND).with_deadline(deadline),
+        )
+        .expect("proposal")
+    );
+    let arbitration = arbiter.finish(&state.active_owners);
+    super::individual::record_committed(observation.round_no, &arbitration, &mut state);
+    let owner = *state.role_owners.get(&WORKER_ID).expect("role owner");
+    observation.round_no = NEXT_ROUND;
+    let late_action = Action::Build {
+        name: BUILDING_KIND.to_owned(),
+        pos: site,
+    };
+    state.record_mission_action(&owner, WORKER_ID, &late_action, observation.round_no);
+
+    state.reconcile_missions(&observation, &[]);
+
+    assert_eq!(mission_state(&state, &owner), MissionState::Executing);
+    assert!(state.active_owners.is_current(&owner));
+    assert_eq!(
+        state
+            .mission_view(owner.mission().id)
+            .expect("mission view")
+            .goal_submission_round(),
+        Some(deadline.at_round())
+    );
 }
 
 fn accept_move(

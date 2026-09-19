@@ -97,6 +97,13 @@ impl DecisionState {
         self.mission_registry.view(mission)
     }
 
+    pub(crate) fn reconcile_missions(&mut self, observation: &Observation, events: &[EventRecord]) {
+        let reconciliation = self.mission_registry.reconcile(observation, events);
+        for resolution in reconciliation.resolved() {
+            self.apply_resolution(*resolution);
+        }
+    }
+
     fn prepare_action(
         &mut self,
         actor: i64,
@@ -203,8 +210,33 @@ impl DecisionState {
         }
     }
 
+    fn apply_resolution(&mut self, resolution: mission::MissionResolution) {
+        let assignee = resolution.assignee();
+        let owner = resolution.owner();
+        self.active_owners.deactivate_assignment(&owner);
+        if self
+            .role_owners
+            .get(&assignee)
+            .is_some_and(|current| current.mission() == owner.mission())
+        {
+            self.role_owners.remove(&assignee);
+        }
+        self.missions.insert(assignee, resolution.state());
+    }
+
     pub(crate) fn block_mission(&mut self, owner: &OwnerPath) {
         self.mission_registry.mark_blocked(owner);
+    }
+
+    pub(crate) fn record_mission_action(
+        &mut self,
+        owner: &OwnerPath,
+        actor: i64,
+        action: &Action,
+        round: i32,
+    ) {
+        self.mission_registry
+            .record_action_commit(owner, actor, action, round);
     }
 
     pub(crate) fn cancel_mission(&mut self, owner: &OwnerPath) {
@@ -248,6 +280,7 @@ pub fn decide(
     state: &mut DecisionState,
     deadline: Instant,
 ) -> Result<Response, DecisionError> {
+    state.reconcile_missions(observation, events);
     state.strategy = strategy::advance(
         observation,
         events,

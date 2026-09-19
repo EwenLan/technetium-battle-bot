@@ -17,6 +17,7 @@ pub struct PendingAction {
 pub fn record_committed(round: i32, arbitration: &ArbitrationResult, state: &mut DecisionState) {
     for proposal in arbitration.accepted() {
         let reporter = proposal.reporter();
+        state.record_mission_action(proposal.owner(), proposal.actor(), proposal.action(), round);
         state.pending_actions.insert(
             reporter,
             PendingAction {

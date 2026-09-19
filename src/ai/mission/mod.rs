@@ -1,11 +1,16 @@
 mod construction;
 mod economy;
+mod goal;
+mod lifecycle;
 mod pioneer;
 mod record;
 mod registry;
 
 pub use construction::BuildPlan;
-pub use record::{MissionCancellation, MissionCompletion, MissionView};
+pub use goal::{GoalEvaluation, GoalEvidence, evaluate_goal};
+pub use record::{
+    MissionCancellation, MissionCompletion, MissionReconciliation, MissionResolution, MissionView,
+};
 pub use registry::{MissionRegistry, MissionRegistryError};
 
 use std::time::Instant;

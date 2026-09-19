@@ -5,7 +5,7 @@
 
 ## 1. 接口边界与实现方式
 
-当前源码入口为 `transport::serve(port)` → `runtime::Session::handle(&[u8]) -> Vec<u8>` → `protocol::decode/encode`、`world::World::apply`、`ai::decide`、`command::Arbiter::propose/finish`。`Session` 先持久化观测和上一轮合法性回执，再克隆 `DecisionState` 草稿；新动作、任务记录、owner 分配和战略事件游标仅在决策成功、编码及截止检查通过后提交，并缓存同回合同请求结果。`MissionRegistry` 持久保存 MissionRecord，依赖只从不可变 MissionSpec 读取；spec 已包含目标谓词、能力、deadline、优先级、可中断性和重试策略。完整 spec 相同才复用 mission/plan，每步新建 intent；建造目标同时含建造格和建筑类型，守备目标含武器 ID。简化 `ActionProposal { actor, owner, action }` 进入仲裁后经过两次完整链校验，等待和 Step 报告复用获准路径。仍无正式 `TurnStamp`、ResourceCoordinator、层级输出/报告队列或 IF16 回放；自动策略尚未产生任务依赖/deadline，也未执行 goal 求值和能力过滤。合法回执仍不等于效果确认。现有 `WorldView` 是观测的只读查询封装，不等同于本文完整 WorldSnapshot。
+当前源码入口为 `transport::serve(port)` → `runtime::Session::handle(&[u8]) -> Vec<u8>` → `protocol::decode/encode`、`world::World::apply`、`ai::decide`、`command::Arbiter::propose/finish`。`Session` 先持久化观测和上一轮合法性回执，再克隆 `DecisionState` 草稿；新动作、任务记录、owner 分配和战略事件游标仅在决策成功、编码及截止检查通过后提交，并缓存同回合同请求结果。`MissionRegistry` 持久保存 MissionRecord，依赖只从不可变 MissionSpec 读取；spec 已包含目标谓词、能力、deadline、优先级、可中断性和重试策略。完整 spec 相同才复用 mission/plan，每步新建 intent；建造目标同时含建造格和建筑类型，守备目标含武器 ID。决策开始时用观测实体和稳定事件求值已支持的 goal，保存来源回合，推进 Succeeded/Expired/Cancelled 并失效 owner；目标动作提交回合作为 ActionSubmission checkpoint。简化 `ActionProposal { actor, owner, action }` 进入仲裁后经过两次完整链校验，等待和 Step 报告复用获准路径。仍无正式 `TurnStamp`、ResourceCoordinator、层级输出/报告队列或 IF16 回放；自动策略尚未产生任务依赖/deadline，也未执行能力过滤。合法回执仍不等于效果确认。现有 `WorldView` 是观测的只读查询封装，不等同于本文完整 WorldSnapshot。
 
 本阶段 `WorldView::task_cells/task_stands/adjacent_task` 将同一任务点的多格 `zones` 合并为交互候选；目前仍采用相邻格交互的保守假设，正式站位语义待 U03 联调。
 
@@ -13,7 +13,7 @@
 | --- | --- |
 | IF01–IF03 | JSON/HTTP、重复键/地图实体与 footprint 边界校验、简化回合缓存与草稿提交；未完成正式事务代次、官方路由验证和结构化日志 |
 | IF04–IF05 | 世界就绪/降级/恢复、有效快照保留、基础差分/记忆、几何/动态建造环、局部动作校验；无完整预测和规则服务 |
-| IF06–IF09 | 直接函数调用、带 goal/dependencies/capabilities/deadline/priority/interruptibility/retry 的 MissionSpec、私有 MissionRegistry/只读 MissionView、依赖解锁和取消传播、每步新 intent；未实现 goal 证据求值、自动任务分解/能力过滤/截止驱动、完整 MissionRecord 进展字段、层级消息和正式提案元数据 |
+| IF06–IF09 | 直接函数调用、完整基础 MissionSpec、私有 MissionRegistry/只读 MissionView、依赖传播、建设/挑战结束/守备窗口 goal 证据、deadline 转移、每步新 intent；未实现经济周期证据、自动任务分解/能力过滤/期限生成、完整进展字段、层级消息和正式提案元数据 |
 | IF10–IF11 | 事件/状态 enum、稳定 ID 的有界事件日志、四个层级读者的独立 cursor/poll/ack、截断和陈旧 receipt 检测、带 intent scope 的有限 Step 报告及旧 owner 隔离；无信封过滤/完整路由或通用 FSM 驱动 |
 | IF12–IF14 | 本轮内角色、目标格、金币的基础预约与响应编码；其余资源/动作及回执未覆盖 |
 | IF15–IF16 | 单次 LLM prompt/下一回合答案；无完整作业、沙盒、SOP、遥测/回放 |
@@ -300,7 +300,7 @@ runtime 在 propose 与 apply_grants 之间调用 IF12；同轮同阶段的这�
 
 DESIGN 中的 Mission 概念在实现中由不可变 MissionSpec 和任务层私有 MissionRecord 表达，不再另建一份可被各层随意修改的公共 Mission 结构。
 
-当前源码的不可变 `MissionSpec` 已实现 `kind、objective、goal、dependencies、required_capabilities、deadline、priority、interruptibility、retry_policy`；owner 由 MissionRecord 保存。构造器保证四种现有任务的 kind/objective/goal/capability/default policy 合法组合，建设 goal 同时含建筑类型和位置；`MissionDeadline::is_expired` 按 G06 区分 inclusive 边界，PriorityClass 采用 Q0–Q4。MissionRecord 保存 spec、OwnerPath assignment、assignee 和 MissionState，`DecisionState::mission_view` 只返回克隆的只读 MissionView。注册表直接读取 spec.dependencies，拒绝未知、自身和 Failed/Cancelled/Expired 前置；前置全部 Succeeded 才 Ready。`succeed` 返回 MissionCompletion，取消/替换返回 MissionCancellation 集合，调用方必须在同一草稿中据此失效 ActiveOwners。当前动作路径在首次获准时直接完成 Ready → Assigned → Executing，失败回执置 Blocked，下一获准动作恢复 Executing。`DecisionError` 区分 Owner 与 MissionRegistry 错误；任一错误使整个决策草稿丢弃。Goal 证据求值、deadline 驱动、能力过滤、租约和其余 MissionRecord 字段仍待实现。
+当前源码的不可变 `MissionSpec` 已实现 `kind、objective、goal、dependencies、required_capabilities、deadline、priority、interruptibility、retry_policy`；owner 由 MissionRecord 保存。构造器保证四种现有任务的合法组合，建设 goal 同时含建筑类型和位置；`MissionDeadline::is_expired` 按 G06 区分 inclusive 边界，PriorityClass 采用 Q0–Q4。MissionRecord 另保存状态、完成证据和首个匹配目标的动作提交回合；MissionView 提供只读克隆。注册表拒绝未知、自身和不可用前置，前置全成功才 Ready。`reconcile` 将建设实体、ChallengeEnded、进入白昼事件和 AllOf 求值为 `Satisfied(evidence)`，按来源回合检查 EffectObservation/InternalPlanning 窗口；ActionSubmission 只接受 Sell/Build/SubmitAnswer/对应武器 Attack，按时提交后等待效果不会被下一轮误判过期。无有效提交的到期根任务进入 Expired，依赖后代 Cancelled；所有 resolution 由 DecisionState 同步失效 ActiveOwners。经济周期证据、能力过滤、自动期限生成、租约和其余进展字段仍待实现。
 
 ### 7.4 IF08：战术 → 个体，以及局部规划服务
 
