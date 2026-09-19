@@ -6,9 +6,9 @@ pub use construction::BuildPlan;
 
 use std::time::Instant;
 
-use crate::ai::{AssignmentKind, DecisionState, propose_owned, tactics};
+use crate::ai::{DecisionState, propose_owned, tactics};
 use crate::command::Arbiter;
-use crate::domain::{Observation, OwnerError};
+use crate::domain::{Action, MissionSpec, Observation, OwnerError, Role};
 use crate::fsm::{IndividualState, MissionState, StrategyState, TacticalState};
 use crate::rules::time::{Phase, phase};
 
@@ -61,22 +61,16 @@ fn assign_day(
 
 fn assign_worker(
     observation: &Observation,
-    worker: &crate::domain::Role,
+    worker: &Role,
     state: &mut DecisionState,
     arbiter: &mut Arbiter<'_>,
 ) -> Result<(), OwnerError> {
-    let selected = construction::worker_action(observation, worker, state)
-        .map(|action| (AssignmentKind::Construction, action))
-        .or_else(|| {
-            economy::worker_action(observation, worker)
-                .map(|action| (AssignmentKind::Economy, action))
-        });
-    let Some((kind, action)) = selected else {
+    let Some((spec, action)) = worker_selection(observation, worker, state) else {
         return Ok(());
     };
     let (tactical_state, individual_state) = state_for_action(&action);
     let building = matches!(action, crate::domain::Action::Build { .. });
-    if !propose_owned(state, arbiter, worker.id, action, kind)? {
+    if !propose_owned(state, arbiter, worker.id, action, spec)? {
         return Ok(());
     }
     if building {
@@ -88,9 +82,21 @@ fn assign_worker(
     Ok(())
 }
 
-fn state_for_action(action: &crate::domain::Action) -> (TacticalState, IndividualState) {
+fn worker_selection(
+    observation: &Observation,
+    worker: &Role,
+    state: &mut DecisionState,
+) -> Option<(MissionSpec, Action)> {
+    if let Some(action) = construction::worker_action(observation, worker, state) {
+        let site = state.build_plans.get(&worker.id)?.site;
+        return Some((MissionSpec::construction(site), action));
+    }
+    economy::worker_action(observation, worker).map(|action| (MissionSpec::economy(), action))
+}
+
+fn state_for_action(action: &Action) -> (TacticalState, IndividualState) {
     match action {
-        crate::domain::Action::Move(_) => (TacticalState::Approach, IndividualState::WaitingResult),
+        Action::Move(_) => (TacticalState::Approach, IndividualState::WaitingResult),
         _ => (TacticalState::Evaluate, IndividualState::WaitingResult),
     }
 }

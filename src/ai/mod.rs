@@ -12,23 +12,15 @@ use std::time::Instant;
 
 use crate::command::Arbiter;
 use crate::domain::{
-    Action, ActionProposal, ActiveOwners, Observation, OwnerAllocator, OwnerError, OwnerPath,
-    Response,
+    Action, ActionProposal, ActiveOwners, MissionSpec, Observation, OwnerAllocator, OwnerError,
+    OwnerPath, Response,
 };
 use crate::event::{EventInbox, EventRecord};
 use crate::fsm::{IndividualState, MissionState, StrategyState, TacticalState};
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum AssignmentKind {
-    Construction,
-    Economy,
-    Challenge,
-    Defense,
-}
-
 #[derive(Clone, Copy, Debug)]
 struct RoleAssignment {
-    kind: AssignmentKind,
+    spec: MissionSpec,
     owner: OwnerPath,
 }
 
@@ -90,13 +82,13 @@ impl DecisionState {
         &mut self,
         actor: i64,
         action: Action,
-        kind: AssignmentKind,
+        spec: MissionSpec,
     ) -> Result<PreparedAction, OwnerError> {
         let reporter = action_reporter(actor, &action);
-        let current = self.current_assignment(reporter, kind);
+        let current = self.current_assignment(reporter, spec);
         match current {
             Some(assignment) => self.prepare_for_assignment(actor, action, assignment),
-            None => self.prepare_new_assignment(actor, action, kind),
+            None => self.prepare_new_assignment(actor, action, spec),
         }
     }
 
@@ -120,11 +112,11 @@ impl DecisionState {
         &mut self,
         actor: i64,
         action: Action,
-        kind: AssignmentKind,
+        spec: MissionSpec,
     ) -> Result<PreparedAction, OwnerError> {
         let owner = self.active_owners.create_path(&mut self.owner_allocator)?;
         let assignment = RoleAssignment {
-            kind,
+            spec,
             owner: owner.assignment(),
         };
         Ok(PreparedAction {
@@ -160,12 +152,12 @@ impl DecisionState {
         }
     }
 
-    fn current_assignment(&self, reporter: i64, kind: AssignmentKind) -> Option<RoleAssignment> {
+    fn current_assignment(&self, reporter: i64, spec: MissionSpec) -> Option<RoleAssignment> {
         self.role_assignments
             .get(&reporter)
             .copied()
             .filter(|assignment| {
-                assignment.kind == kind && self.active_owners.is_current(&assignment.owner)
+                assignment.spec == spec && self.active_owners.is_current(&assignment.owner)
             })
     }
 
@@ -192,9 +184,9 @@ pub(crate) fn propose_owned(
     arbiter: &mut Arbiter<'_>,
     actor: i64,
     action: Action,
-    kind: AssignmentKind,
+    spec: MissionSpec,
 ) -> Result<bool, OwnerError> {
-    let prepared = state.prepare_action(actor, action, kind)?;
+    let prepared = state.prepare_action(actor, action, spec)?;
     if arbiter.propose(&prepared.proposal, &state.active_owners) {
         state.commit_proposal(&prepared);
         return Ok(true);

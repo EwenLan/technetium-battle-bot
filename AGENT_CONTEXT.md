@@ -52,7 +52,7 @@ LLM 服务于新闻推理、宝藏线索和自进化任务，通过比赛的 `pr
 
 细化版设计已补充世界生命周期、各层状态行为/转移矩阵、10 类任务流程、类型化事件/上报目录，以及挑战、认知作业、新闻和宝藏子状态机。共用约束包括分阶段有限推进、保存未消费证据、报告作用域、取消代次和终止作业墓碑；动作提出、提交和效果确认分开处理。
 
-目标接口基线为 IF01–IF16，统一 TurnStamp/OwnerPath、任务规范与私有记录、意图/建议/已提交动作、类型化事件、资源租约与认知作业。当前已实现 OwnerPath/ActiveOwners 的完整父链代际校验与失效墓碑、四类工作族的简化 assignment、逐步 intent、带 owner 的 ActionProposal、响应编译前复验、等待/Step 报告 owner 贯通，以及简化事件日志的按层 cursor/poll/ack；只有战略读者接入 Session 草稿。ResourceCoordinator、带 MissionSpec/目标键的持久任务 DAG、正式提案元数据、共享 decision 模块、正式信封/报告路由与预测仓尚未实现。
+目标接口基线为 IF01–IF16，统一 TurnStamp/OwnerPath、任务规范与私有记录、意图/建议/已提交动作、类型化事件、资源租约与认知作业。当前已实现 OwnerPath/ActiveOwners 的完整父链代际校验与失效墓碑、带稳定目标键的简化 MissionSpec assignment、逐步 intent、带 owner 的 ActionProposal、响应编译前复验、等待/Step 报告 owner 贯通，以及简化事件日志的按层 cursor/poll/ack；只有战略读者接入 Session 草稿。ResourceCoordinator、带完整字段的持久任务 DAG、正式提案元数据、共享 decision 模块、正式信封/报告路由与预测仓尚未实现。
 
 ## 4. 重要事实与待确认项
 
@@ -155,6 +155,14 @@ U01 已解决：用户确认基地 2×2，武器环为周围 4×4 减基地，�
 - 分配和 ID 仍位于 Session 决策草稿；新增测试证明连续步骤父路径不变、旧 intent 失效、换类撤销旧任务、丢弃草稿不推进持久 ID，以及停用节点不能以相同 generation 复活。
 - 当前工作族键不含正式目标、期限、依赖和租约；MissionSpec/DAG、资源协调器与正式 ActionProposal 元数据仍待后续阶段。
 - 验证通过：rustfmt、Clippy warnings-as-errors、54 个 Rust 测试（5 个单元、49 个集成）、locked release 构建、本机 HTTP 200 JSON 冒烟，以及本阶段文件/函数长度和业务代码数字字面量审计。
+
+### 2026-09-20：用 MissionSpec 稳定目标键区分 assignment
+
+- 新增不可变 `MissionSpec`、`MissionKind` 和 `ObjectiveKey`；构造器绑定经济循环、建造格、挑战会话和守备武器的合法 kind/objective 组合。
+- `DecisionState` 仅在 reporter 的完整 spec 相同时复用 mission/plan；建造目标格或守备武器变化会创建新 assignment 并使旧父链失效，每个获准步骤仍替换 intent。
+- 建设移动与建造动作从同一 BuildPlan 取得目标格，防守移动与攻击从同一武器取得目标 ID；拒绝提案和丢弃草稿的事务规则不变。
+- 当前经济和挑战目标键仍是会话级，spec 不含 owner、goal、依赖、期限、优先级和租约；这些字段与任务 DAG 仍属 P2 后续工作。
+- 验证通过：rustfmt、Clippy warnings-as-errors、57 个 Rust 测试（6 个单元、51 个集成）、locked release 构建、本机 HTTP 200 JSON 冒烟，以及本阶段文件/函数长度和业务代码数字字面量审计。
 
 ## 6. 后续记录规范
 

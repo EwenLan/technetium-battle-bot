@@ -1,6 +1,6 @@
-use super::{AssignmentKind, DecisionState, propose_owned};
+use super::{DecisionState, propose_owned};
 use crate::command::Arbiter;
-use crate::domain::{Action, OwnerPath, Pos};
+use crate::domain::{Action, MissionSpec, OwnerPath, Pos};
 use crate::protocol::decode;
 
 const DAY_REQUEST: &str = include_str!("../../tests/fixtures/day.json");
@@ -9,6 +9,8 @@ const WEAPON_ID: i64 = 20;
 const WORKER_ID: i64 = 10;
 const MOVE_X: i32 = 4;
 const MOVE_Y: i32 = 4;
+const OTHER_SITE_X: i32 = 5;
+const OTHER_SITE_Y: i32 = 4;
 
 #[test]
 fn rejected_owned_proposal_preserves_existing_work() {
@@ -28,7 +30,7 @@ fn rejected_owned_proposal_preserves_existing_work() {
         &mut arbiter,
         WORKER_ID,
         Action::Move(worker.pos),
-        AssignmentKind::Economy,
+        MissionSpec::economy(),
     )
     .expect("proposal");
 
@@ -69,7 +71,7 @@ fn attack_owner_is_committed_to_the_controller() {
                 controller: WORKER_ID,
                 targets: vec![target],
             },
-            AssignmentKind::Defense,
+            MissionSpec::defense(WEAPON_ID),
         )
         .expect("proposal")
     );
@@ -84,8 +86,8 @@ fn successive_steps_reuse_assignment_and_replace_intent() {
     let observation = decode(DAY_REQUEST.as_bytes()).expect("fixture").observation;
     let mut state = DecisionState::default();
 
-    let first = accept_move(&observation, &mut state, AssignmentKind::Economy);
-    let second = accept_move(&observation, &mut state, AssignmentKind::Economy);
+    let first = accept_move(&observation, &mut state, MissionSpec::economy());
+    let second = accept_move(&observation, &mut state, MissionSpec::economy());
 
     assert_eq!(first.mission(), second.mission());
     assert_eq!(first.plan(), second.plan());
@@ -95,12 +97,19 @@ fn successive_steps_reuse_assignment_and_replace_intent() {
 }
 
 #[test]
-fn changing_work_kind_replaces_the_assignment() {
+fn changing_mission_spec_replaces_the_assignment() {
     let observation = decode(DAY_REQUEST.as_bytes()).expect("fixture").observation;
     let mut state = DecisionState::default();
 
-    let economy = accept_move(&observation, &mut state, AssignmentKind::Economy);
-    let construction = accept_move(&observation, &mut state, AssignmentKind::Construction);
+    let economy = accept_move(&observation, &mut state, MissionSpec::economy());
+    let construction = accept_move(
+        &observation,
+        &mut state,
+        MissionSpec::construction(Pos {
+            x: MOVE_X,
+            y: MOVE_Y,
+        }),
+    );
 
     assert_ne!(economy.mission(), construction.mission());
     assert_ne!(economy.plan(), construction.plan());
@@ -109,14 +118,42 @@ fn changing_work_kind_replaces_the_assignment() {
 }
 
 #[test]
+fn changing_objective_replaces_assignment_within_the_same_kind() {
+    let observation = decode(DAY_REQUEST.as_bytes()).expect("fixture").observation;
+    let mut state = DecisionState::default();
+
+    let first = accept_move(
+        &observation,
+        &mut state,
+        MissionSpec::construction(Pos {
+            x: MOVE_X,
+            y: MOVE_Y,
+        }),
+    );
+    let second = accept_move(
+        &observation,
+        &mut state,
+        MissionSpec::construction(Pos {
+            x: OTHER_SITE_X,
+            y: OTHER_SITE_Y,
+        }),
+    );
+
+    assert_ne!(first.mission(), second.mission());
+    assert_ne!(first.plan(), second.plan());
+    assert!(!state.active_owners.is_current(&first));
+    assert!(state.active_owners.is_current(&second));
+}
+
+#[test]
 fn discarded_draft_does_not_advance_persistent_owner_ids() {
     let observation = decode(DAY_REQUEST.as_bytes()).expect("fixture").observation;
     let state = DecisionState::default();
     let mut discarded = state.clone();
-    let discarded_owner = accept_move(&observation, &mut discarded, AssignmentKind::Economy);
+    let discarded_owner = accept_move(&observation, &mut discarded, MissionSpec::economy());
     let mut committed = state;
 
-    let committed_owner = accept_move(&observation, &mut committed, AssignmentKind::Economy);
+    let committed_owner = accept_move(&observation, &mut committed, MissionSpec::economy());
 
     assert_eq!(discarded_owner, committed_owner);
 }
@@ -124,14 +161,14 @@ fn discarded_draft_does_not_advance_persistent_owner_ids() {
 fn accept_move(
     observation: &crate::domain::Observation,
     state: &mut DecisionState,
-    kind: AssignmentKind,
+    spec: MissionSpec,
 ) -> OwnerPath {
     let mut arbiter = Arbiter::new(observation);
     let action = Action::Move(Pos {
         x: MOVE_X,
         y: MOVE_Y,
     });
-    assert!(propose_owned(state, &mut arbiter, WORKER_ID, action, kind).expect("proposal"));
+    assert!(propose_owned(state, &mut arbiter, WORKER_ID, action, spec).expect("proposal"));
     let arbitration = arbiter.finish(&state.active_owners);
     assert!(
         arbitration

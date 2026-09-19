@@ -166,9 +166,15 @@ FSM 管理跨回合阶段，效用评分在状态允许的策略中做选择。�
 
 ## D29：工作 assignment 复用 mission/plan，动作只替换 intent
 
-**状态：采纳，细化 D26–D28。** 当前垂直切片按 reporter 和 `Construction/Economy/Challenge/Defense` 工作族保存简化 assignment。相同工作族的后续动作沿用 mission/plan，并为每个候选创建新的 intent；只有提案获准才停用上一 intent。工作族改变时创建新 mission/plan/intent，并在获准后停用旧 assignment；本地拒绝只停用候选节点，原工作仍有效。攻击 assignment 归 controller，协议 actor 仍是武器。
+**状态：采纳，细化 D26–D28；工作族键由 D30 细化为稳定目标键。** 当时的垂直切片按 reporter 和 `Construction/Economy/Challenge/Defense` 工作族保存简化 assignment。相同工作族的后续动作沿用 mission/plan，并为每个候选创建新的 intent；只有提案获准才停用上一 intent。工作族改变时创建新 mission/plan/intent，并在获准后停用旧 assignment；本地拒绝只停用候选节点，原工作仍有效。攻击 assignment 归 controller，协议 actor 仍是武器。
 
-`ActiveOwners` 为三层注册都保留 generation 与 active 标志。停用节点不删除代次记录，同 ID 恢复必须使用更高 generation；停用 plan 只使该 plan 及其 intent 失效，停用 mission 使完整子链失效。分配器和 assignment 都位于 `DecisionState` 草稿，失败或丢弃的决策不会推进持久 ID。代价是当前工作族键比真实任务目标粗，同类不同目标可能共用 plan；后续 MissionSpec/DAG 应以稳定目标键、期限和租约替代该过渡键，而不改变逐步 intent 和完整父链校验规则。
+`ActiveOwners` 为三层注册都保留 generation 与 active 标志。停用节点不删除代次记录，同 ID 恢复必须使用更高 generation；停用 plan 只使该 plan 及其 intent 失效，停用 mission 使完整子链失效。分配器和 assignment 都位于 `DecisionState` 草稿，失败或丢弃的决策不会推进持久 ID。D30 已消除同一工作族不同建造点或武器共用 plan 的问题；逐步 intent 和完整父链校验规则保持不变。
+
+## D30：MissionSpec 使用稳定目标键决定 assignment 身份
+
+**状态：采纳，细化 D29 和目标 IF07。** 当前不可变 `MissionSpec` 由 mission kind 与 objective key 组成。经济循环与挑战会话使用固定目标键，建设任务使用建造格，守备任务使用武器 ID。reporter 只有在完整 spec 相同时复用 mission/plan；kind 或 objective 变化时创建新 assignment，并在新提案获准后停用旧父链。每一步仍创建独立 intent，攻击的 reporter/actor 规则不变。
+
+构造器绑定合法 kind/objective 组合，避免调用方构造“建设任务指向武器”等无效身份。目标键来自已选 BuildPlan 或防守武器，保证接近目标与执行动作属于同一任务。代价是经济和挑战暂为会话级粗目标，spec 也尚未包含 owner、goal、依赖、期限、优先级和租约；这些字段随持久任务 DAG 增补，不改变以稳定目标键判断 assignment 延续性的规则。
 
 ## 变更规则
 

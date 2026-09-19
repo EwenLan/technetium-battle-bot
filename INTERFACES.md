@@ -5,7 +5,7 @@
 
 ## 1. 接口边界与实现方式
 
-当前源码入口为 `transport::serve(port)` → `runtime::Session::handle(&[u8]) -> Vec<u8>` → `protocol::decode/encode`、`world::World::apply`、`ai::decide`、`command::Arbiter::propose/finish`。`Session` 先持久化观测和上一轮合法性回执，再克隆 `DecisionState` 草稿；新动作、owner 分配和战略事件游标仅在决策成功、编码及截止检查通过后提交，并缓存同回合同请求结果。角色按四类工作族保存简化 assignment，同类动作复用 mission/plan、每步新建 intent；简化 `ActionProposal { actor, owner, action }` 进入仲裁后经过两次完整链校验，等待和 Step 报告复用获准路径。仍无正式 `TurnStamp`、ResourceCoordinator、层级输出/报告队列或 IF16 回放；工作族 assignment 也尚不是带 MissionSpec/目标键的持久任务 DAG。合法回执仍不等于效果确认。现有 `WorldView` 是观测的只读查询封装，不等同于本文完整 WorldSnapshot。
+当前源码入口为 `transport::serve(port)` → `runtime::Session::handle(&[u8]) -> Vec<u8>` → `protocol::decode/encode`、`world::World::apply`、`ai::decide`、`command::Arbiter::propose/finish`。`Session` 先持久化观测和上一轮合法性回执，再克隆 `DecisionState` 草稿；新动作、owner 分配和战略事件游标仅在决策成功、编码及截止检查通过后提交，并缓存同回合同请求结果。角色按简化 `MissionSpec { kind, objective }` 保存 assignment，完整 spec 相同才复用 mission/plan，每步新建 intent；建造目标键是建造格，守备目标键是武器 ID，经济和挑战暂用固定会话键。简化 `ActionProposal { actor, owner, action }` 进入仲裁后经过两次完整链校验，等待和 Step 报告复用获准路径。仍无正式 `TurnStamp`、ResourceCoordinator、层级输出/报告队列或 IF16 回放；简化 assignment 也尚不是完整持久任务 DAG。合法回执仍不等于效果确认。现有 `WorldView` 是观测的只读查询封装，不等同于本文完整 WorldSnapshot。
 
 本阶段 `WorldView::task_cells/task_stands/adjacent_task` 将同一任务点的多格 `zones` 合并为交互候选；目前仍采用相邻格交互的保守假设，正式站位语义待 U03 联调。
 
@@ -13,7 +13,7 @@
 | --- | --- |
 | IF01–IF03 | JSON/HTTP、重复键/地图实体与 footprint 边界校验、简化回合缓存与草稿提交；未完成正式事务代次、官方路由验证和结构化日志 |
 | IF04–IF05 | 世界就绪/降级/恢复、有效快照保留、基础差分/记忆、几何/动态建造环、局部动作校验；无完整预测和规则服务 |
-| IF06–IF09 | 直接函数调用、四类工作族 assignment、带新 intent 的简化 ActionProposal、提交后等待及回执报告；未实现 MissionSpec/目标键 DAG、层级消息、正式提案元数据或完整个体转移契约 |
+| IF06–IF09 | 直接函数调用、带稳定目标键的简化 MissionSpec assignment、每步新 intent、简化 ActionProposal、提交后等待及回执报告；未实现完整 MissionSpec 字段、任务 DAG、层级消息、正式提案元数据或完整个体转移契约 |
 | IF10–IF11 | 事件/状态 enum、稳定 ID 的有界事件日志、四个层级读者的独立 cursor/poll/ack、截断和陈旧 receipt 检测、带 intent scope 的有限 Step 报告及旧 owner 隔离；无信封过滤/完整路由或通用 FSM 驱动 |
 | IF12–IF14 | 本轮内角色、目标格、金币的基础预约与响应编码；其余资源/动作及回执未覆盖 |
 | IF15–IF16 | 单次 LLM prompt/下一回合答案；无完整作业、沙盒、SOP、遥测/回放 |
@@ -91,7 +91,7 @@ enum WorkOwner {
 
 `OwnerPath` 必须由构造器保证父链完整：有 intent 必有 plan；子节点必须登记在对应父节点下。任务代次失效会使其所有计划/意图失效，计划代次失效只影响该计划。运行时的 `ActiveOwners` 索引提供 `is_current(owner)`，最终校验不能只检查最末级 generation。
 
-当前 `domain::owner` 已交付 `MissionId/PlanId/IntentId/Generation/Versioned/OwnerPath/ActiveOwners/OwnerAllocator`。mission/plan/intent 注册均保存 generation 和 active 标志；停用保留墓碑，同 ID 再激活必须严格推进 generation，且子节点不能换父。`create_assignment` 创建 mission/plan，`create_intent` 只接受当前 assignment，父层、plan 或单个 intent 均可独立失效。AI 草稿按 reporter 和工作族复用 assignment；同类提案接受后只替换 intent，换类才替换 mission/plan，本地拒绝保留原路径。响应编译再次逐级比对，失效提案不会编码或进入等待。正式 MissionSpec、目标级 assignment、超时和任务 DAG 仍待实现。
+当前 `domain::owner` 已交付 `MissionId/PlanId/IntentId/Generation/Versioned/OwnerPath/ActiveOwners/OwnerAllocator`。mission/plan/intent 注册均保存 generation 和 active 标志；停用保留墓碑，同 ID 再激活必须严格推进 generation，且子节点不能换父。`create_assignment` 创建 mission/plan，`create_intent` 只接受当前 assignment，父层、plan 或单个 intent 均可独立失效。AI 草稿按 reporter 和简化 MissionSpec 复用 assignment；完整 spec 相同的提案获准后只替换 intent，kind 或 objective 变化才替换 mission/plan，本地拒绝保留原路径。响应编译再次逐级比对，失效提案不会编码或进入等待。完整 MissionSpec 字段、超时和任务 DAG 仍待实现。
 
 行动建议必须精确匹配本轮 `TurnStamp`。跨回合 Mission/Plan 可以保留，但其下一步建议必须基于当前快照重新校验并重新盖 stamp；不能只替换旧建议的 round。已提交动作和作业保存发送时的原 stamp，不能因旧代次失效而删掉真实回执。
 
@@ -300,6 +300,8 @@ runtime 在 propose 与 apply_grants 之间调用 IF12；同轮同阶段的这�
 
 DESIGN 中的 Mission 概念在实现中由不可变 MissionSpec 和任务层私有 MissionRecord 表达，不再另建一份可被各层随意修改的公共 Mission 结构。
 
+当前源码先交付不可变的简化 `MissionSpec { kind, objective }`。公开构造器保证 `GatherAndSell/EconomyCycle`、`Construct/ConstructionSite(Pos)`、`Challenge/ChallengeSession`、`DefendSector/DefenseWeapon(i64)` 的合法组合；其中 `i64` 是现有协议实体 ID 的过渡表示。owner 暂由私有 `RoleAssignment` 分开保存。后续扩展到上表字段时保留这些稳定目标键，并由任务层创建正式 MissionRecord 和 DAG 关系。
+
 ### 7.4 IF08：战术 → 个体，以及局部规划服务
 
 ```rust
@@ -352,7 +354,7 @@ struct ActionProposal {
 }
 ```
 
-当前源码的过渡类型只包含 `actor: i64`、`owner: OwnerPath` 和 `action: Action`。actor 单独保存是因为现有简化 `Action` 尚未携带主体；`reporter()` 对普通动作返回 actor，对攻击返回 controller。`ai::propose_owned` 从当前工作族 assignment 派生 intent，负责候选路径的准备、接受或按层撤销；`Arbiter::propose` 校验当时的 owner 与动作/冲突，`Arbiter::finish` 再过滤失效 owner。它返回的 `ArbitrationResult` 拥有响应及私有最终 accepted 集合，`record_committed` 只接受该结果，调用方不能用初验集合绕过最终校验。这不等同于下述正式 ID/stamp/claims/expected/group 契约已完成。
+当前源码的过渡类型只包含 `actor: i64`、`owner: OwnerPath` 和 `action: Action`。actor 单独保存是因为现有简化 `Action` 尚未携带主体；`reporter()` 对普通动作返回 actor，对攻击返回 controller。`ai::propose_owned` 从 reporter 的当前 MissionSpec assignment 派生 intent，负责候选路径的准备、接受或按层撤销；`Arbiter::propose` 校验当时的 owner 与动作/冲突，`Arbiter::finish` 再过滤失效 owner。它返回的 `ArbitrationResult` 拥有响应及私有最终 accepted 集合，`record_committed` 只接受该结果，调用方不能用初验集合绕过最终校验。这不等同于下述正式 ID/stamp/claims/expected/group 契约已完成。
 
 `Action` 内含执行主体，`actor()` 由它计算，禁止另存一份可冲突的 actor 字段。攻击 actor 是武器，`participants()` 同时包含操控角色。`ExpectedEffect` 是效果谓词及确认窗口/证据要求，不能被 world 当成事实；可表示 PositionChanged/InventoryDelta/BuildingChanged/AttackAcknowledged/ChallengeChanged/TreasureResult。
 

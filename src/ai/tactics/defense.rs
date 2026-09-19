@@ -1,8 +1,8 @@
 use std::collections::BTreeSet;
 
-use crate::ai::{AssignmentKind, DecisionState, propose_owned};
+use crate::ai::{DecisionState, propose_owned};
 use crate::command::Arbiter;
-use crate::domain::{Action, Observation, OwnerError, Pos, Role};
+use crate::domain::{Action, MissionSpec, Observation, OwnerError, Pos, Role};
 use crate::rules::constants::{
     DEFAULT_LEVEL, MAX_FIRE_TARGETS, NEIGHBOR_RANGE, NO_COOLDOWN, NO_HEALTH,
 };
@@ -45,7 +45,13 @@ pub fn defend(
             } else {
                 controller.id
             };
-            propose_owned(state, arbiter, actor, action, AssignmentKind::Defense)?;
+            propose_owned(
+                state,
+                arbiter,
+                actor,
+                action,
+                MissionSpec::defense(weapon.id),
+            )?;
         }
     }
     Ok(())
