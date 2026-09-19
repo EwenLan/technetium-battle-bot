@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::domain::{Action, Command, Observation, Response};
-use crate::rules::build::BuildMask;
+use crate::rules::build::BuildArea;
 use crate::rules::constants::{NO_HEALTH, ZERO_GOLD};
 use crate::rules::time::{Phase, phase};
 use crate::world::WorldView;
@@ -12,22 +12,22 @@ pub struct Arbiter<'a> {
     used_roles: BTreeSet<i64>,
     reserved_destinations: BTreeSet<crate::domain::Pos>,
     reserved_build_sites: BTreeSet<crate::domain::Pos>,
+    reserved_weapon_count: usize,
     accepted: Vec<(i64, Action)>,
     remaining_gold: Option<i32>,
-    build_mask: Option<&'a BuildMask>,
 }
 
 impl<'a> Arbiter<'a> {
-    pub fn new(observation: &'a Observation, build_mask: Option<&'a BuildMask>) -> Self {
+    pub fn new(observation: &'a Observation) -> Self {
         Self {
             view: WorldView::new(observation),
             commands: BTreeMap::new(),
             used_roles: BTreeSet::new(),
             reserved_destinations: BTreeSet::new(),
             reserved_build_sites: BTreeSet::new(),
+            reserved_weapon_count: crate::rules::constants::EMPTY_COUNT,
             accepted: Vec::new(),
             remaining_gold: observation.team_our.gold_num,
-            build_mask,
         }
     }
 
@@ -152,9 +152,19 @@ impl<'a> Arbiter<'a> {
     }
 
     fn valid_build(&self, role: &crate::domain::Role, name: &str, pos: crate::domain::Pos) -> bool {
-        let mask_allows = self
-            .build_mask
-            .is_some_and(|mask| mask.allows_weapon(&self.view.observation.team_our.faction, pos));
+        if !self.valid_build_common(role, pos) {
+            return false;
+        }
+        let Some(area) = self.build_area(pos) else {
+            return false;
+        };
+        if name == "wall" {
+            return area == BuildArea::Wall && role.backpack.iter().any(|item| item == "stone");
+        }
+        area == BuildArea::Weapon && self.valid_weapon_build(name)
+    }
+
+    fn valid_weapon_build(&self, name: &str) -> bool {
         let existing_weapons = self
             .view
             .observation
@@ -166,20 +176,28 @@ impl<'a> Arbiter<'a> {
                     && building.health.is_some_and(|hp| hp > NO_HEALTH)
             })
             .count();
-        role.role_type == "worker"
-            && phase(self.view.observation.round_no) == Some(Phase::Day)
-            && crate::ai::strategy::is_weapon(name)
-            && existing_weapons + self.reserved_build_sites.len()
-                < crate::rules::constants::MAX_WEAPONS
+        crate::ai::strategy::is_weapon(name)
+            && existing_weapons + self.reserved_weapon_count < crate::rules::constants::MAX_WEAPONS
             && self
                 .remaining_gold
                 .is_some_and(|gold| gold >= crate::rules::constants::WEAPON_BUILD_GOLD)
+    }
+
+    fn valid_build_common(&self, role: &crate::domain::Role, pos: crate::domain::Pos) -> bool {
+        role.role_type == "worker"
+            && phase(self.view.observation.round_no) == Some(Phase::Day)
             && self.view.adjacent(role.pos, pos)
             && role.pos != pos
             && self.view.can_enter(pos, role.id)
             && !self.reserved_build_sites.contains(&pos)
             && !self.reserved_destinations.contains(&pos)
-            && mask_allows
+    }
+
+    fn build_area(&self, pos: crate::domain::Pos) -> Option<BuildArea> {
+        let station = self.view.observation.team_our.roles.iter().find(|role| {
+            role.role_type == "station" && role.health.is_some_and(|hp| hp > NO_HEALTH)
+        })?;
+        Some(crate::rules::build::area(station.pos, pos))
     }
 
     fn valid_attack(&self, weapon: i64, controller: i64, targets: &[crate::domain::Pos]) -> bool {
@@ -231,11 +249,16 @@ impl<'a> Arbiter<'a> {
         if let Action::Move(pos) = action {
             self.reserved_destinations.insert(*pos);
         }
-        if let Action::Build { pos, .. } = action {
+        if let Action::Build { name, pos } = action {
             self.reserved_build_sites.insert(*pos);
-            self.remaining_gold = self
-                .remaining_gold
-                .map(|gold| gold.saturating_sub(crate::rules::constants::WEAPON_BUILD_GOLD));
+            if crate::ai::strategy::is_weapon(name) {
+                self.reserved_weapon_count = self
+                    .reserved_weapon_count
+                    .saturating_add(crate::rules::constants::SINGLE_ITEM);
+                self.remaining_gold = self
+                    .remaining_gold
+                    .map(|gold| gold.saturating_sub(crate::rules::constants::WEAPON_BUILD_GOLD));
+            }
         }
         if let Action::Attack { controller, .. } = action {
             self.used_roles.insert(*controller);

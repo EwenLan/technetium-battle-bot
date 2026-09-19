@@ -1,6 +1,0 @@
-{
-  "weapons": {
-    "challenger": [{"x": 4, "y": 4}, {"x": 5, "y": 4}, {"x": 5, "y": 5}],
-    "defender": []
-  }
-}

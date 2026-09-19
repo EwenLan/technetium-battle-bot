@@ -23,7 +23,7 @@ fn rejected_action_does_not_enter_waiting_state() {
         .iter()
         .find(|role| role.id == WORKER_ID)
         .expect("worker");
-    let mut arbiter = Arbiter::new(&observation, None);
+    let mut arbiter = Arbiter::new(&observation);
     assert!(!arbiter.propose(WORKER_ID, Action::Move(worker.pos)));
     let mut state = DecisionState::default();
     record_committed(observation.round_no, arbiter.accepted(), &mut state);
@@ -34,7 +34,7 @@ fn rejected_action_does_not_enter_waiting_state() {
 #[test]
 fn rejected_by_judger_action_reports_failure_to_parent_states() {
     let mut observation = decode(DAY_REQUEST.as_bytes()).expect("fixture").observation;
-    let mut arbiter = Arbiter::new(&observation, None);
+    let mut arbiter = Arbiter::new(&observation);
     assert!(arbiter.propose(
         WORKER_ID,
         Action::Move(Pos {
@@ -86,7 +86,7 @@ fn weapon_feedback_is_attributed_to_its_controller() {
         .first()
         .expect("robot")
         .pos;
-    let mut arbiter = Arbiter::new(&observation, None);
+    let mut arbiter = Arbiter::new(&observation);
     assert!(arbiter.propose(
         WEAPON_ID,
         Action::Attack {

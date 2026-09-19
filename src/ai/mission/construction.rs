@@ -1,7 +1,6 @@
 use crate::ai::DecisionState;
 use crate::ai::tactics::next_step;
 use crate::domain::{Action, Observation, Pos, Role};
-use crate::rules::build::BuildMask;
 use crate::rules::constants::{
     ACTION_RESULT_GRACE_ROUNDS, MAX_WEAPONS, NEIGHBOR_RANGE, NO_HEALTH, WEAPON_BUILD_GOLD,
 };
@@ -74,14 +73,12 @@ pub fn worker_action(
     observation: &Observation,
     worker: &Role,
     state: &mut DecisionState,
-    mask: Option<&BuildMask>,
 ) -> Option<Action> {
     if worker.health.unwrap_or(NO_HEALTH) <= NO_HEALTH {
         return None;
     }
-    let mask = mask?;
     if !state.build_plans.contains_key(&worker.id) {
-        let plan = choose_plan(observation, worker, state, mask)?;
+        let plan = choose_plan(observation, worker, state)?;
         state.build_plans.insert(worker.id, plan);
     }
     let plan = state.build_plans.get(&worker.id)?;
@@ -98,7 +95,6 @@ fn choose_plan(
     observation: &Observation,
     worker: &Role,
     state: &DecisionState,
-    mask: &BuildMask,
 ) -> Option<BuildPlan> {
     let pending = i32::try_from(state.build_plans.len()).ok()?;
     let required = pending
@@ -127,7 +123,7 @@ fn choose_plan(
             .any(|role| role.role_type == *kind)
             && !state.build_plans.values().any(|plan| plan.kind == *kind)
     })?;
-    let site = choose_site(observation, worker, state, mask)?;
+    let site = choose_site(observation, worker, state)?;
     Some(BuildPlan {
         kind,
         site,
@@ -135,32 +131,32 @@ fn choose_plan(
     })
 }
 
-fn choose_site(
-    observation: &Observation,
-    worker: &Role,
-    state: &DecisionState,
-    mask: &BuildMask,
-) -> Option<Pos> {
+fn choose_site(observation: &Observation, worker: &Role, state: &DecisionState) -> Option<Pos> {
     let view = WorldView::new(observation);
     let base = observation
         .team_our
         .roles
         .iter()
         .find(|role| role.role_type == "station")?;
-    mask.weapon_sites(&observation.team_our.faction)
-        .filter(|site| {
-            *site != worker.pos
-                && view.can_enter(*site, worker.id)
-                && !state.bad_build_sites.contains(site)
-        })
-        .filter(|site| !state.build_plans.values().any(|plan| plan.site == *site))
-        .filter_map(|site| {
-            let stands = view.interact_positions(site, worker.id);
-            let path = next_step(&view, worker.id, worker.pos, &stands)?;
-            Some((site, path.steps))
-        })
-        .min_by_key(|(site, steps)| (station_distance(base.pos, *site), *steps, site.y, site.x))
-        .map(|(site, _)| site)
+    crate::rules::build::weapon_sites(
+        base.pos,
+        observation.map_info.width,
+        observation.map_info.height,
+    )
+    .into_iter()
+    .filter(|site| {
+        *site != worker.pos
+            && view.can_enter(*site, worker.id)
+            && !state.bad_build_sites.contains(site)
+    })
+    .filter(|site| !state.build_plans.values().any(|plan| plan.site == *site))
+    .filter_map(|site| {
+        let stands = view.interact_positions(site, worker.id);
+        let path = next_step(&view, worker.id, worker.pos, &stands)?;
+        Some((site, path.steps))
+    })
+    .min_by_key(|(site, steps)| (station_distance(base.pos, *site), *steps, site.y, site.x))
+    .map(|(site, _)| site)
 }
 
 fn plan_action(observation: &Observation, worker: &Role, plan: &BuildPlan) -> Option<Action> {

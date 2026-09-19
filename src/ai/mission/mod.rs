@@ -10,14 +10,12 @@ use crate::ai::{DecisionState, tactics};
 use crate::command::Arbiter;
 use crate::domain::Observation;
 use crate::fsm::{IndividualState, MissionState, StrategyState, TacticalState};
-use crate::rules::build::BuildMask;
 use crate::rules::time::{Phase, phase};
 
 pub fn assign(
     observation: &Observation,
     state: &mut DecisionState,
     arbiter: &mut Arbiter<'_>,
-    build_mask: Option<&BuildMask>,
     deadline: Instant,
 ) {
     construction::refresh(observation, state);
@@ -30,14 +28,13 @@ pub fn assign(
         tactics::defend(observation, arbiter);
         return;
     }
-    assign_day(observation, state, arbiter, build_mask, deadline);
+    assign_day(observation, state, arbiter, deadline);
 }
 
 fn assign_day(
     observation: &Observation,
     state: &mut DecisionState,
     arbiter: &mut Arbiter<'_>,
-    build_mask: Option<&BuildMask>,
     deadline: Instant,
 ) {
     let mut workers: Vec<_> = observation
@@ -58,7 +55,7 @@ fn assign_day(
         {
             continue;
         }
-        assign_worker(observation, worker, state, arbiter, build_mask);
+        assign_worker(observation, worker, state, arbiter);
     }
     pioneer::assign(observation, state, arbiter);
 }
@@ -68,9 +65,8 @@ fn assign_worker(
     worker: &crate::domain::Role,
     state: &mut DecisionState,
     arbiter: &mut Arbiter<'_>,
-    mask: Option<&BuildMask>,
 ) {
-    let action = construction::worker_action(observation, worker, state, mask)
+    let action = construction::worker_action(observation, worker, state)
         .or_else(|| economy::worker_action(observation, worker));
     let Some(action) = action else { return };
     let state_after = state_for_action(&action);

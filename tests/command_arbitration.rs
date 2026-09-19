@@ -19,7 +19,7 @@ fn attack_reserves_its_controller_action_slot() {
     let observation = decode(NIGHT_REQUEST.as_bytes())
         .expect("fixture")
         .observation;
-    let mut arbiter = Arbiter::new(&observation, None);
+    let mut arbiter = Arbiter::new(&observation);
     let target = Pos {
         x: ROBOT_X,
         y: ROBOT_Y,
@@ -41,7 +41,7 @@ fn attack_reserves_its_controller_action_slot() {
 #[test]
 fn same_destination_is_reserved_once() {
     let observation = decode(DAY_REQUEST.as_bytes()).expect("fixture").observation;
-    let mut arbiter = Arbiter::new(&observation, None);
+    let mut arbiter = Arbiter::new(&observation);
     let target = Pos {
         x: MOVE_TARGET_X,
         y: MOVE_TARGET_Y,
@@ -70,7 +70,7 @@ fn upgraded_gatling_rejects_opposite_target_directions() {
         x: WEAPON_X - NEIGHBOR_RANGE,
         y: ROBOT_Y,
     };
-    let mut arbiter = Arbiter::new(&observation, None);
+    let mut arbiter = Arbiter::new(&observation);
     assert!(!arbiter.propose(
         WEAPON_ID,
         Action::Attack {

@@ -3,7 +3,6 @@ use std::net::{TcpListener, TcpStream};
 use std::time::Duration;
 
 use crate::protocol::empty_response;
-use crate::rules::build::BuildMask;
 use crate::rules::constants::{
     EMPTY_COUNT, HTTP_BAD_REQUEST, HTTP_METHOD_NOT_ALLOWED, HTTP_OK, HTTP_PAYLOAD_TOO_LARGE,
     HTTP_READ_TIMEOUT_MS, MAX_HTTP_BODY_BYTES, MAX_HTTP_HEADER_BYTES, ZERO_BYTE,
@@ -16,7 +15,7 @@ const HEADER_TERMINATOR_BYTES: usize = 4;
 
 pub fn serve(port: u16) -> io::Result<()> {
     let listener = TcpListener::bind(("0.0.0.0", port))?;
-    let mut session = Session::new(BuildMask::load_from_env()?);
+    let mut session = Session::new();
     for connection in listener.incoming() {
         match connection {
             Ok(mut stream) => {

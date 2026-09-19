@@ -75,7 +75,6 @@ pub const VERSION_INCREMENT: u64 = 1;
 pub const MIN_COORDINATE: i32 = 0;
 pub const NO_ACTOR_ID: i64 = i64::MIN;
 pub const CMD_PORT_ARG_INDEX: usize = 1;
-pub const MAX_BUILD_MASK_SITES_PER_SIDE: usize = 128;
 pub const MAX_REMEMBERED_ENEMIES: usize = 512;
 pub const MAX_NEWS_RECORDS: usize = 128;
 pub const MAX_NEWS_TEXT_CHARS: usize = 8192;

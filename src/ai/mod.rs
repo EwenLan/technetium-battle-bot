@@ -11,7 +11,6 @@ use crate::command::Arbiter;
 use crate::domain::{Observation, Response};
 use crate::event::WorldEvent;
 use crate::fsm::{IndividualState, MissionState, StrategyState, TacticalState};
-use crate::rules::build::BuildMask;
 
 #[derive(Clone, Debug)]
 pub struct DecisionState {
@@ -48,7 +47,6 @@ pub fn decide(
     observation: &Observation,
     events: &[WorldEvent],
     state: &mut DecisionState,
-    build_mask: Option<&BuildMask>,
     deadline: Instant,
 ) -> Response {
     state.strategy = strategy::advance(
@@ -57,8 +55,8 @@ pub fn decide(
         state.strategy,
         &mut state.emergency_clear,
     );
-    let mut arbiter = Arbiter::new(observation, build_mask);
-    mission::assign(observation, state, &mut arbiter, build_mask, deadline);
+    let mut arbiter = Arbiter::new(observation);
+    mission::assign(observation, state, &mut arbiter, deadline);
     individual::record_committed(observation.round_no, arbiter.accepted(), state);
     let mut response = arbiter.finish();
     response.prompt = cognition::prepare_prompt(observation, &mut state.challenge);

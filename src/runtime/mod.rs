@@ -2,7 +2,6 @@ use std::time::{Duration, Instant};
 
 use crate::ai::{DecisionState, decide, individual};
 use crate::protocol::{decode, empty_response, encode};
-use crate::rules::build::BuildMask;
 use crate::rules::constants::HTTP_DECISION_TIMEOUT_MS;
 use crate::world::World;
 
@@ -13,17 +12,16 @@ pub struct Session {
     last_team: Option<String>,
     last_key: Option<String>,
     last_reply: Vec<u8>,
-    build_mask: Option<BuildMask>,
 }
 
 impl Default for Session {
     fn default() -> Self {
-        Self::new(None)
+        Self::new()
     }
 }
 
 impl Session {
-    pub fn new(build_mask: Option<BuildMask>) -> Self {
+    pub fn new() -> Self {
         Self {
             world: World::default(),
             decision: DecisionState::default(),
@@ -31,7 +29,6 @@ impl Session {
             last_team: None,
             last_key: None,
             last_reply: Vec::new(),
-            build_mask,
         }
     }
 
@@ -68,13 +65,7 @@ impl Session {
         self.world.apply(observation.clone());
         self.decision.reports = individual::reconcile(&observation, &mut self.decision);
         let mut draft = self.decision.clone();
-        let planned = decide(
-            &observation,
-            &self.world.events,
-            &mut draft,
-            self.build_mask.as_ref(),
-            deadline,
-        );
+        let planned = decide(&observation, &self.world.events, &mut draft, deadline);
         let encoded = encode(&planned).ok().filter(|_| Instant::now() <= deadline);
         let committed = encoded.is_some();
         let reply = encoded.unwrap_or_else(empty_response);

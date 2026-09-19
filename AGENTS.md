@@ -14,7 +14,7 @@ This repository contains `technetium-battle-bot`, a Rust 2024 binary for the “
 - `docs/Demo/CoreGeek.tar.gz`: supplied demo archive.
 - `target/`: generated Cargo output, ignored by Git.
 
-The optional `BOT_BUILD_MASK_PATH` points to a verified JSON weapon-site mask; without one, automatic construction stays disabled. The test mask in `tests/fixtures/` is synthetic and must not be treated as an official map.
+Build areas are derived from the observed 2×2 station: the surrounding 4×4 ring is for weapons, and the surrounding 6×6 outer ring is for walls. Keep these rules in `rules/build.rs`; do not hard-code faction coordinates in strategy code.
 
 ## 项目文档导航与维护
 
