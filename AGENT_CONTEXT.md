@@ -52,7 +52,7 @@ LLM 服务于新闻推理、宝藏线索和自进化任务，通过比赛的 `pr
 
 细化版设计已补充世界生命周期、各层状态行为/转移矩阵、10 类任务流程、类型化事件/上报目录，以及挑战、认知作业、新闻和宝藏子状态机。共用约束包括分阶段有限推进、保存未消费证据、报告作用域、取消代次和终止作业墓碑；动作提出、提交和效果确认分开处理。
 
-目标接口基线为 IF01–IF16，统一 TurnStamp/OwnerPath、任务规范与私有记录、意图/建议/已提交动作、类型化事件、资源租约与认知作业。当前已实现 OwnerPath/ActiveOwners 的完整父链代际校验与失效墓碑、带稳定目标键和依赖集合的 MissionRegistry、只读 MissionView、基础任务生命周期与取消传播、逐步 intent、带 owner 的 ActionProposal、响应编译前复验、等待/Step 报告 owner 贯通，以及简化事件日志的按层 cursor/poll/ack；只有战略读者接入 Session 草稿。ResourceCoordinator、自动任务 DAG、完整 MissionSpec/Record 字段、正式提案元数据、共享 decision 模块、正式信封/报告路由与预测仓尚未实现。
+目标接口基线为 IF01–IF16，统一 TurnStamp/OwnerPath、任务规范与私有记录、意图/建议/已提交动作、类型化事件、资源租约与认知作业。当前已实现 OwnerPath/ActiveOwners 的完整父链代际校验与失效墓碑、包含 goal/dependencies/capabilities/deadline/priority/interruptibility/retry 的 MissionSpec、持久 MissionRegistry、只读 MissionView、基础任务生命周期与取消传播、逐步 intent、带 owner 的 ActionProposal、响应编译前复验、等待/Step 报告 owner 贯通，以及简化事件日志的按层 cursor/poll/ack；只有战略读者接入 Session 草稿。ResourceCoordinator、自动任务分解、goal/能力/截止执行、完整 MissionRecord 进展字段、正式提案元数据、共享 decision 模块、正式信封/报告路由与预测仓尚未实现。
 
 ## 4. 重要事实与待确认项
 
@@ -171,6 +171,14 @@ U01 已解决：用户确认基地 2×2，武器环为周围 4×4 减基地，�
 - 实际动作首次获准时推进 Ready → Assigned → Executing；失败回执同步置 Blocked，下一获准动作恢复 Executing，角色死亡同步取消 registry 任务。`DecisionError` 区分 owner 与 registry 失败并沿用草稿原子回滚。
 - 当前策略仍只创建无依赖任务，且缺少完整 goal、期限、优先级、能力、租约、checkpoint、progress 和完成证据；自动 MissionFactory/AssignmentSolver 仍待 P2/P3。
 - 验证通过：rustfmt、Clippy warnings-as-errors、62 个 Rust 测试（7 个单元、55 个集成）、locked release 构建、本机 HTTP 200 JSON 冒烟，以及本阶段文件/函数长度、分支循环和数字字面量审计。
+
+### 2026-09-20：完整基础 MissionSpec 契约
+
+- MissionSpec 扩展为 kind、objective、GoalPredicate、dependencies、required capabilities、MissionDeadline、Q0–Q4 PriorityClass、Interruptibility 和 RetryPolicy；建设 goal 同时包含建筑类型和位置。
+- MissionRegistry 移除独立 dependencies 参数，注册守卫、Ready 解锁和取消传播只读取 spec，消除调用参数与任务身份不一致；完整 spec 变化会替换 assignment。
+- MissionDeadline 区分 ActionSubmission、EffectObservation、InternalPlanning，并实现 inclusive/exclusive 过期边界；四类现有任务构造器填充明确的 goal、能力和默认调度策略。
+- 当前实时策略仍只生成无依赖/无 deadline 契约，goal 证据求值、能力过滤、截止转移、租约和 MissionRecord 进展字段仍待实现。
+- 验证通过：rustfmt、Clippy warnings-as-errors、65 个 Rust 测试（7 个单元、58 个集成）、locked release 构建、本机 HTTP 200 JSON 冒烟，以及本阶段文件/函数长度、分支循环和数字字面量审计。
 
 ## 6. 后续记录规范
 

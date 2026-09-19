@@ -29,15 +29,14 @@ impl MissionRegistry {
         assignee: i64,
         spec: MissionSpec,
         owner: OwnerPath,
-        dependencies: &[MissionId],
     ) -> Result<MissionId, MissionRegistryError> {
         validate_assignment(owner)?;
         let mission = owner.mission().id;
         if self.records.contains_key(&mission) {
             return Err(MissionRegistryError::DuplicateMission);
         }
-        self.validate_dependencies(mission, dependencies)?;
-        let state = self.initial_state(dependencies);
+        self.validate_dependencies(mission, spec.dependencies())?;
+        let state = self.initial_state(spec.dependencies());
         self.records.insert(
             mission,
             MissionRecord {
@@ -45,7 +44,6 @@ impl MissionRegistry {
                 owner,
                 assignee,
                 state,
-                dependencies: dependencies.iter().copied().collect(),
             },
         );
         Ok(mission)
@@ -124,10 +122,10 @@ impl MissionRegistry {
         self.records.get(&mission).map(MissionRecord::view)
     }
 
-    pub fn current_assignment(&self, assignee: i64, spec: MissionSpec) -> Option<OwnerPath> {
+    pub fn current_assignment(&self, assignee: i64, spec: &MissionSpec) -> Option<OwnerPath> {
         let mission = self.active_by_assignee.get(&assignee)?;
         self.records.get(mission).and_then(|record| {
-            (record.spec == spec && is_active(record.state)).then_some(record.owner)
+            (&record.spec == spec && is_active(record.state)).then_some(record.owner)
         })
     }
 
@@ -137,7 +135,7 @@ impl MissionRegistry {
         spec: MissionSpec,
         owner: OwnerPath,
     ) -> Result<Vec<MissionCancellation>, MissionRegistryError> {
-        let mission = self.register(assignee, spec, owner, &[])?;
+        let mission = self.register(assignee, spec, owner)?;
         let cancelled = self.assign(mission)?;
         self.activate(mission)?;
         Ok(cancelled)
@@ -190,7 +188,7 @@ impl MissionRegistry {
             .unwrap_or_default()
     }
 
-    fn initial_state(&self, dependencies: &[MissionId]) -> MissionState {
+    fn initial_state(&self, dependencies: &BTreeSet<MissionId>) -> MissionState {
         if self.dependencies_succeeded(dependencies) {
             MissionState::Ready
         } else {
@@ -201,7 +199,7 @@ impl MissionRegistry {
     fn validate_dependencies(
         &self,
         mission: MissionId,
-        dependencies: &[MissionId],
+        dependencies: &BTreeSet<MissionId>,
     ) -> Result<(), MissionRegistryError> {
         for dependency in dependencies {
             if *dependency == mission {
@@ -218,7 +216,7 @@ impl MissionRegistry {
         Ok(())
     }
 
-    fn dependencies_succeeded(&self, dependencies: &[MissionId]) -> bool {
+    fn dependencies_succeeded(&self, dependencies: &BTreeSet<MissionId>) -> bool {
         dependencies.iter().all(|dependency| {
             self.records
                 .get(dependency)
@@ -249,7 +247,7 @@ impl MissionRegistry {
             .iter()
             .filter(|(_, record)| {
                 record.state == MissionState::Proposed
-                    && self.dependencies_succeeded_set(&record.dependencies)
+                    && self.dependencies_succeeded(record.spec.dependencies())
             })
             .map(|(mission, _)| *mission)
             .collect();
@@ -259,14 +257,6 @@ impl MissionRegistry {
             }
         }
         ready
-    }
-
-    fn dependencies_succeeded_set(&self, dependencies: &BTreeSet<MissionId>) -> bool {
-        dependencies.iter().all(|dependency| {
-            self.records
-                .get(dependency)
-                .is_some_and(|record| record.state == MissionState::Succeeded)
-        })
     }
 
     fn cancel_current_except(
@@ -311,7 +301,7 @@ impl MissionRegistry {
         while let Some(mission) = pending.pop_first() {
             found.insert(mission);
             for (candidate, record) in &self.records {
-                if record.dependencies.contains(&mission) && !found.contains(candidate) {
+                if record.spec.dependencies().contains(&mission) && !found.contains(candidate) {
                     pending.insert(*candidate);
                 }
             }

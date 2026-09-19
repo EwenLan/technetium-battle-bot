@@ -293,7 +293,7 @@ W1/W2 偏好只在任务等级、期限、效用和行程等指标相同后用�
 
 所有非终态适用 G01/G03 的取消传播；W.Degraded 冻结执行而非批量 Failed。任务死亡处理依可替代性决定，不把所有 UnitDied 一律映射 Failed。Assigned 的握手只用 INTERFACES 中的 MissionActivated，不新增同义事件。
 
-当前 `MissionRegistry` 已实现这张表的基础骨架：新记录依据前置状态进入 Proposed 或 Ready，活动任务经过 Assigned/Executing，动作失败可进入 Blocked，下一次获准动作恢复 Executing；Succeeded 会唤醒所有前置已满足的记录，Cancelled 会传播到依赖子树。实时策略目前只创建无依赖任务并在首个动作获准时连续完成 Ready → Assigned → Executing；Failed、Expired、Suspended、截止、完成证据和自动 DAG 分解仍须按本表补齐。
+当前不可变 MissionSpec 已固定 GoalPredicate、target、dependencies、required capabilities、MissionDeadline、Q0–Q4 priority、interruptibility 和 RetryPolicy，完整契约变化会更换 assignment；MissionDeadline 的 inclusive 边界已按 G06 实现。`MissionRegistry` 依据 spec 前置状态进入 Proposed 或 Ready，活动任务经过 Assigned/Executing，动作失败可进入 Blocked，下一次获准动作恢复 Executing；Succeeded 会唤醒所有前置已满足的记录，Cancelled 会传播到依赖子树。实时策略目前仍只创建无依赖、无 deadline 任务；goal 证据求值、能力过滤、截止驱动、Failed/Expired/Suspended、完成证据和自动 DAG 分解仍须按本表补齐。
 
 ## 7. 战术 T 与个体 I：计划、动作和恢复
 

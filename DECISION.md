@@ -182,6 +182,12 @@ FSM 管理跨回合阶段，效用评分在状态允许的策略中做选择。�
 
 注册拒绝未知、自身或已不可用的前置；任务成功后统一扫描并唤醒所有前置均成功的 Proposed 记录，取消则按 MissionId 稳定顺序传播到依赖子树。成功返回 MissionCompletion，取消/替换返回 MissionCancellation 集合，调用方必须在同一草稿中停用对应 ActiveOwners 父链，因此后代不能继续输出动作。代价是每次成功或取消当前采用小规模全表扫描，但比赛角色和任务规模有限、结果确定；任务规模增长后可增加反向依赖索引。自动 MissionFactory、goal/deadline/priority/lease、失败传播策略和完成证据仍待实现。
 
+## D32：MissionSpec 是任务身份和调度约束的唯一不可变契约
+
+**状态：采纳，细化 D30/D31 和 IF07。** MissionSpec 从 `{kind, objective}` 扩展为同时包含类型化 GoalPredicate、前置 MissionId 集合、required capabilities、MissionDeadline、Q0–Q4 PriorityClass、Interruptibility 和 RetryPolicy。建设任务的 goal 同时保存建筑类型与坐标，避免同一地块更换建筑类型时误复用任务。MissionRegistry 不再接收单独 dependencies 参数，所有 DAG 守卫和传播只读取 spec 中的唯一集合。
+
+assignment 复用比较完整 MissionSpec，因此目标、依赖、期限、优先级或执行策略任一变化都会创建新父路径；这避免旧计划继承已经改变的授权。MissionDeadline 明确 action submission、effect observation 和 internal planning 三种期限，并按 inclusive 标志实现 G06 边界。代价是 MissionSpec 不再 Copy，调用点必须显式借用或克隆；任务规模很小，契约克隆成本可控。当前四类构造器提供策略默认值，但实时 MissionFactory 尚未生成依赖/deadline，也未执行 goal 证据求值、能力过滤和期限转移。
+
 ## 变更规则
 
 为新决策分配递增 D 编号，保留旧决策并标记“被 Dxx 替代”，说明触发证据、兼容影响和验证结果；不要抹去仍影响现有实现的假设。规则缺口获得证据后同时更新 DESIGN 的 U 条目及 PLAN 的验收状态。

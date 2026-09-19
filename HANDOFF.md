@@ -14,9 +14,9 @@
 
 世界的 `ColdStart/Ready/Degraded` 已接入会话：地图尺寸或阵营在同一会话突变时保留最后有效快照、返回空响应，并在一致新帧到来后恢复；生命周期和差分事件进入稳定 ID 的有界日志。`EventInbox` 为四个层级读者维护独立 cursor，支持 poll/ack、截断检测和陈旧 receipt 拒绝；战略读者已接入决策草稿，失败草稿不会推进游标。当前没有信封过滤、实例路由和关键截断恢复，其他三层读者也尚未接入调度。
 
-`domain::owner` 已实现类型化 mission/plan/intent ID、generation、确定性 `OwnerAllocator`、`OwnerPath` 与 `ActiveOwners`。任务层的 `MissionRegistry` 按 MissionId 保存私有记录及只读 MissionView，包含简化 spec、owner、assignee、状态和依赖；前置成功会将依赖任务从 Proposed 唤醒到 Ready，取消会传播到依赖子树。经济和挑战使用固定会话目标，建设按建造格、守备按武器 ID 区分目标。完整 spec 相同时复用 mission/plan，每个动作提案创建新 intent；目标变化时替换 assignment。`command::Arbiter` 在接收提案和编译响应前各校验一次完整父链，等待和 Step 报告复用提案 owner。
+`domain::owner` 已实现类型化 mission/plan/intent ID、generation、确定性 `OwnerAllocator`、`OwnerPath` 与 `ActiveOwners`。不可变 MissionSpec 已包含 kind、稳定目标键、类型化 goal、依赖、所需能力、deadline、Q0–Q4 优先级、可中断性和重试策略；建设目标同时记录坐标与建筑类型。任务层的 `MissionRegistry` 按 MissionId 保存私有记录及只读 MissionView，直接读取 spec 依赖；前置成功会将依赖任务从 Proposed 唤醒到 Ready，取消会传播到依赖子树。完整 spec 相同时复用 mission/plan，每个动作提案创建新 intent；契约变化时替换 assignment。`command::Arbiter` 在接收提案和编译响应前各校验一次完整父链，等待和 Step 报告复用提案 owner。
 
-当前自动策略创建的任务仍不带依赖，且 `MissionSpec` 尚无 goal、期限、优先级、能力和租约；MissionRecord 也没有 checkpoint、progress、lease 或完成证据。经济和挑战的固定目标未区分具体矿点、商店或挑战代次。简化 `ActionProposal` 只有 actor、owner、action，未包含正式契约的 ProposalId、TurnStamp、claims、预期效果和原子组。战略已有阶段选择，个体已有提交动作的简化等待/回执处理；其余 enum 不代表完成的状态机。仲裁目前允许 `move/collect/sell/build/attack/acceptTask/submitAnswer/use Medicine` 的受限子集。夜间火力是基础贪心，无穿透/溅射结算模型和联合配对。
+当前自动策略创建的任务仍不带依赖或 deadline，goal 尚未接入世界证据求值，required capabilities 也未进入分配过滤；MissionSpec 尚无资源租约，MissionRecord 也没有 checkpoint、progress、lease 或完成证据。经济和挑战的固定目标未区分具体矿点、商店或挑战代次。简化 `ActionProposal` 只有 actor、owner、action，未包含正式契约的 ProposalId、TurnStamp、claims、预期效果和原子组。战略已有阶段选择，个体已有提交动作的简化等待/回执处理；其余 enum 不代表完成的状态机。仲裁目前允许 `move/collect/sell/build/attack/acceptTask/submitAnswer/use Medicine` 的受限子集。夜间火力是基础贪心，无穿透/溅射结算模型和联合配对。
 
 认知仅覆盖单次 prompt/紧邻下一回合结果，尚无每日额度、作业代次、迟到结果墓碑、沙盒、SOP；新闻、宝藏、墙体、采购/升级/拆除与完整回放尚未实现。不能宣称适合正式比赛或达到目标性能。协议空响应、构建目标与启动方式还需官方环境验证。
 
@@ -33,7 +33,7 @@ bash run.sh 45731
 curl --noproxy '*' -sS -X POST --data-binary @tests/fixtures/day.json http://127.0.0.1:45731/
 ```
 
-最新阶段已通过 rustfmt、Clippy warnings-as-errors、62 个 Rust 测试（7 个单元测试、55 个集成测试）、locked release 构建和本机 HTTP 冒烟。任务验证覆盖依赖解锁、取消传播、活动任务替换、阻塞后恢复、相同目标跨步骤复用、同类目标切换、草稿回滚及旧回执隔离；该结果不代表完整 P2 或官方判题器联调完成。
+最新阶段已通过 rustfmt、Clippy warnings-as-errors、65 个 Rust 测试（7 个单元测试、58 个集成测试）、locked release 构建和本机 HTTP 冒烟。任务验证覆盖完整契约身份、deadline 边界、非法依赖、依赖解锁、取消传播、活动任务替换、阻塞后恢复、草稿回滚及旧回执隔离；该结果不代表完整 P2 或官方判题器联调完成。
 
 继续按 PLAN 补齐 P0 的其余正式规则与运行环境证据，再完成 P1 的正式事务/异常服务测试、P2 的世界/FSM/事件上报、P3 的动作与经济闭环、P4 防守、P5 认知、P6 新闻宝藏、P7 全场回放。建造区域 U01 已解决；围墙布局仍须先验证基地出口与操炮通路。每次代码变更按 [AGENTS.md](AGENTS.md) 限制拆分、测试、同步文档并及时提交推送。
 

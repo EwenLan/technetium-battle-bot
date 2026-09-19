@@ -1,5 +1,3 @@
-use std::collections::BTreeSet;
-
 use crate::domain::{MissionId, MissionSpec, OwnerPath};
 use crate::fsm::MissionState;
 
@@ -41,12 +39,11 @@ pub struct MissionView {
     owner: OwnerPath,
     assignee: i64,
     state: MissionState,
-    dependencies: BTreeSet<MissionId>,
 }
 
 impl MissionView {
-    pub const fn spec(&self) -> MissionSpec {
-        self.spec
+    pub const fn spec(&self) -> &MissionSpec {
+        &self.spec
     }
 
     pub const fn owner(&self) -> OwnerPath {
@@ -61,8 +58,8 @@ impl MissionView {
         self.state
     }
 
-    pub const fn dependencies(&self) -> &BTreeSet<MissionId> {
-        &self.dependencies
+    pub fn dependencies(&self) -> &std::collections::BTreeSet<MissionId> {
+        self.spec.dependencies()
     }
 }
 
@@ -72,17 +69,15 @@ pub(super) struct MissionRecord {
     pub(super) owner: OwnerPath,
     pub(super) assignee: i64,
     pub(super) state: MissionState,
-    pub(super) dependencies: BTreeSet<MissionId>,
 }
 
 impl MissionRecord {
     pub(super) fn view(&self) -> MissionView {
         MissionView {
-            spec: self.spec,
+            spec: self.spec.clone(),
             owner: self.owner,
             assignee: self.assignee,
             state: self.state,
-            dependencies: self.dependencies.clone(),
         }
     }
 }

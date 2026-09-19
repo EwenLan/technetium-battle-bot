@@ -104,7 +104,7 @@ impl DecisionState {
         spec: MissionSpec,
     ) -> Result<PreparedAction, DecisionError> {
         let reporter = action_reporter(actor, &action);
-        let current = self.current_assignment(reporter, spec);
+        let current = self.current_assignment(reporter, &spec);
         match current {
             Some(assignment) => self.prepare_for_assignment(actor, action, spec, assignment),
             None => self.prepare_new_assignment(actor, action, spec),
@@ -149,7 +149,7 @@ impl DecisionState {
         if prepared.replaces_assignment {
             let cancelled = self.mission_registry.activate_for_action(
                 reporter,
-                prepared.spec,
+                prepared.spec.clone(),
                 prepared.assignment,
             )?;
             self.apply_cancellations(cancelled);
@@ -181,7 +181,7 @@ impl DecisionState {
         }
     }
 
-    fn current_assignment(&self, reporter: i64, spec: MissionSpec) -> Option<OwnerPath> {
+    fn current_assignment(&self, reporter: i64, spec: &MissionSpec) -> Option<OwnerPath> {
         self.mission_registry
             .current_assignment(reporter, spec)
             .filter(|owner| self.active_owners.is_current(owner))

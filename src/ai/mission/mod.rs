@@ -92,8 +92,8 @@ fn worker_selection(
     state: &mut DecisionState,
 ) -> Option<(MissionSpec, Action)> {
     if let Some(action) = construction::worker_action(observation, worker, state) {
-        let site = state.build_plans.get(&worker.id)?.site;
-        return Some((MissionSpec::construction(site), action));
+        let plan = state.build_plans.get(&worker.id)?;
+        return Some((MissionSpec::construction(plan.site, plan.kind), action));
     }
     economy::worker_action(observation, worker).map(|action| (MissionSpec::economy(), action))
 }

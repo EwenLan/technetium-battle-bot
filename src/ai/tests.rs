@@ -12,6 +12,7 @@ const MOVE_X: i32 = 4;
 const MOVE_Y: i32 = 4;
 const OTHER_SITE_X: i32 = 5;
 const OTHER_SITE_Y: i32 = 4;
+const BUILDING_KIND: &str = "gatling";
 
 #[test]
 fn rejected_owned_proposal_preserves_existing_work() {
@@ -31,10 +32,13 @@ fn rejected_owned_proposal_preserves_existing_work() {
         &mut arbiter,
         WORKER_ID,
         Action::Move(worker.pos),
-        MissionSpec::construction(Pos {
-            x: OTHER_SITE_X,
-            y: OTHER_SITE_Y,
-        }),
+        MissionSpec::construction(
+            Pos {
+                x: OTHER_SITE_X,
+                y: OTHER_SITE_Y,
+            },
+            BUILDING_KIND,
+        ),
     )
     .expect("proposal");
 
@@ -124,10 +128,13 @@ fn changing_mission_spec_replaces_the_assignment() {
     let construction = accept_move(
         &observation,
         &mut state,
-        MissionSpec::construction(Pos {
-            x: MOVE_X,
-            y: MOVE_Y,
-        }),
+        MissionSpec::construction(
+            Pos {
+                x: MOVE_X,
+                y: MOVE_Y,
+            },
+            BUILDING_KIND,
+        ),
     );
 
     assert_ne!(economy.mission(), construction.mission());
@@ -149,18 +156,24 @@ fn changing_objective_replaces_assignment_within_the_same_kind() {
     let first = accept_move(
         &observation,
         &mut state,
-        MissionSpec::construction(Pos {
-            x: MOVE_X,
-            y: MOVE_Y,
-        }),
+        MissionSpec::construction(
+            Pos {
+                x: MOVE_X,
+                y: MOVE_Y,
+            },
+            BUILDING_KIND,
+        ),
     );
     let second = accept_move(
         &observation,
         &mut state,
-        MissionSpec::construction(Pos {
-            x: OTHER_SITE_X,
-            y: OTHER_SITE_Y,
-        }),
+        MissionSpec::construction(
+            Pos {
+                x: OTHER_SITE_X,
+                y: OTHER_SITE_Y,
+            },
+            BUILDING_KIND,
+        ),
     );
 
     assert_ne!(first.mission(), second.mission());
