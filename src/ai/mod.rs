@@ -18,6 +18,26 @@ use crate::domain::{
 use crate::event::{EventInbox, EventRecord};
 use crate::fsm::{IndividualState, MissionState, StrategyState, TacticalState};
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum AssignmentKind {
+    Construction,
+    Economy,
+    Challenge,
+    Defense,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct RoleAssignment {
+    kind: AssignmentKind,
+    owner: OwnerPath,
+}
+
+struct PreparedAction {
+    proposal: ActionProposal,
+    assignment: RoleAssignment,
+    replaces_assignment: bool,
+}
+
 #[derive(Clone, Debug)]
 pub struct DecisionState {
     pub strategy: StrategyState,
@@ -34,6 +54,7 @@ pub struct DecisionState {
     pub active_owners: ActiveOwners,
     pub owner_allocator: OwnerAllocator,
     pub role_owners: BTreeMap<i64, OwnerPath>,
+    role_assignments: BTreeMap<i64, RoleAssignment>,
 }
 
 impl Default for DecisionState {
@@ -53,6 +74,7 @@ impl Default for DecisionState {
             active_owners: ActiveOwners::default(),
             owner_allocator: OwnerAllocator::default(),
             role_owners: BTreeMap::new(),
+            role_assignments: BTreeMap::new(),
         }
     }
 }
@@ -64,23 +86,103 @@ impl DecisionState {
         Ok(owner)
     }
 
-    fn prepare_action(&mut self, actor: i64, action: Action) -> Result<ActionProposal, OwnerError> {
+    fn prepare_action(
+        &mut self,
+        actor: i64,
+        action: Action,
+        kind: AssignmentKind,
+    ) -> Result<PreparedAction, OwnerError> {
+        let reporter = action_reporter(actor, &action);
+        let current = self.current_assignment(reporter, kind);
+        match current {
+            Some(assignment) => self.prepare_for_assignment(actor, action, assignment),
+            None => self.prepare_new_assignment(actor, action, kind),
+        }
+    }
+
+    fn prepare_for_assignment(
+        &mut self,
+        actor: i64,
+        action: Action,
+        assignment: RoleAssignment,
+    ) -> Result<PreparedAction, OwnerError> {
+        let owner = self
+            .active_owners
+            .create_intent(&mut self.owner_allocator, &assignment.owner)?;
+        Ok(PreparedAction {
+            proposal: ActionProposal::new(actor, owner, action),
+            assignment,
+            replaces_assignment: false,
+        })
+    }
+
+    fn prepare_new_assignment(
+        &mut self,
+        actor: i64,
+        action: Action,
+        kind: AssignmentKind,
+    ) -> Result<PreparedAction, OwnerError> {
         let owner = self.active_owners.create_path(&mut self.owner_allocator)?;
-        Ok(ActionProposal::new(actor, owner, action))
+        let assignment = RoleAssignment {
+            kind,
+            owner: owner.assignment(),
+        };
+        Ok(PreparedAction {
+            proposal: ActionProposal::new(actor, owner, action),
+            assignment,
+            replaces_assignment: true,
+        })
     }
 
-    fn commit_proposal(&mut self, proposal: &ActionProposal) {
-        self.commit_owner(proposal.reporter(), *proposal.owner());
+    fn commit_proposal(&mut self, prepared: &PreparedAction) {
+        let reporter = prepared.proposal.reporter();
+        if prepared.replaces_assignment {
+            self.replace_assignment(reporter, prepared.assignment);
+        } else if let Some(previous) = self.role_owners.get(&reporter).copied() {
+            self.deactivate_intent(&previous);
+        }
+        self.role_owners
+            .insert(reporter, *prepared.proposal.owner());
     }
 
-    fn discard_proposal(&mut self, proposal: &ActionProposal) {
-        self.active_owners
-            .deactivate_mission(proposal.owner().mission().id);
+    fn discard_proposal(&mut self, prepared: &PreparedAction) {
+        if prepared.replaces_assignment {
+            self.active_owners
+                .deactivate_assignment(&prepared.assignment.owner);
+        } else {
+            self.deactivate_intent(prepared.proposal.owner());
+        }
     }
 
     fn commit_owner(&mut self, reporter: i64, owner: OwnerPath) {
         if let Some(previous) = self.role_owners.insert(reporter, owner) {
-            self.active_owners.deactivate_mission(previous.mission().id);
+            self.active_owners.deactivate_assignment(&previous);
+        }
+    }
+
+    fn current_assignment(&self, reporter: i64, kind: AssignmentKind) -> Option<RoleAssignment> {
+        self.role_assignments
+            .get(&reporter)
+            .copied()
+            .filter(|assignment| {
+                assignment.kind == kind && self.active_owners.is_current(&assignment.owner)
+            })
+    }
+
+    fn replace_assignment(&mut self, reporter: i64, assignment: RoleAssignment) {
+        let previous = self
+            .role_assignments
+            .insert(reporter, assignment)
+            .map(|assignment| assignment.owner)
+            .or_else(|| self.role_owners.get(&reporter).copied());
+        if let Some(previous) = previous {
+            self.active_owners.deactivate_assignment(&previous);
+        }
+    }
+
+    fn deactivate_intent(&mut self, owner: &OwnerPath) {
+        if let Some(intent) = owner.intent() {
+            self.active_owners.deactivate_intent(intent.id);
         }
     }
 }
@@ -90,14 +192,22 @@ pub(crate) fn propose_owned(
     arbiter: &mut Arbiter<'_>,
     actor: i64,
     action: Action,
+    kind: AssignmentKind,
 ) -> Result<bool, OwnerError> {
-    let proposal = state.prepare_action(actor, action)?;
-    if arbiter.propose(&proposal, &state.active_owners) {
-        state.commit_proposal(&proposal);
+    let prepared = state.prepare_action(actor, action, kind)?;
+    if arbiter.propose(&prepared.proposal, &state.active_owners) {
+        state.commit_proposal(&prepared);
         return Ok(true);
     }
-    state.discard_proposal(&proposal);
+    state.discard_proposal(&prepared);
     Ok(false)
+}
+
+fn action_reporter(actor: i64, action: &Action) -> i64 {
+    match action {
+        Action::Attack { controller, .. } => *controller,
+        _ => actor,
+    }
 }
 
 pub fn decide(

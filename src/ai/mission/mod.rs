@@ -6,7 +6,7 @@ pub use construction::BuildPlan;
 
 use std::time::Instant;
 
-use crate::ai::{DecisionState, propose_owned, tactics};
+use crate::ai::{AssignmentKind, DecisionState, propose_owned, tactics};
 use crate::command::Arbiter;
 use crate::domain::{Observation, OwnerError};
 use crate::fsm::{IndividualState, MissionState, StrategyState, TacticalState};
@@ -65,12 +65,18 @@ fn assign_worker(
     state: &mut DecisionState,
     arbiter: &mut Arbiter<'_>,
 ) -> Result<(), OwnerError> {
-    let action = construction::worker_action(observation, worker, state)
-        .or_else(|| economy::worker_action(observation, worker));
-    let Some(action) = action else { return Ok(()) };
+    let selected = construction::worker_action(observation, worker, state)
+        .map(|action| (AssignmentKind::Construction, action))
+        .or_else(|| {
+            economy::worker_action(observation, worker)
+                .map(|action| (AssignmentKind::Economy, action))
+        });
+    let Some((kind, action)) = selected else {
+        return Ok(());
+    };
     let (tactical_state, individual_state) = state_for_action(&action);
     let building = matches!(action, crate::domain::Action::Build { .. });
-    if !propose_owned(state, arbiter, worker.id, action)? {
+    if !propose_owned(state, arbiter, worker.id, action, kind)? {
         return Ok(());
     }
     if building {

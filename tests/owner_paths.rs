@@ -89,6 +89,94 @@ fn allocator_creates_distinct_current_owner_paths() {
     assert!(owners.is_current(&second));
 }
 
+#[test]
+fn assignment_reuses_parent_for_successive_intents() {
+    let mut owners = ActiveOwners::default();
+    let mut allocator = OwnerAllocator::default();
+    let assignment = owners
+        .create_assignment(&mut allocator)
+        .expect("assignment");
+    let first = owners
+        .create_intent(&mut allocator, &assignment)
+        .expect("first intent");
+    assert!(owners.deactivate_intent(first.intent().expect("intent").id));
+    let second = owners
+        .create_intent(&mut allocator, &assignment)
+        .expect("second intent");
+
+    assert_eq!(first.mission(), second.mission());
+    assert_eq!(first.plan(), second.plan());
+    assert_ne!(first.intent(), second.intent());
+    assert!(owners.is_current(&assignment));
+    assert!(!owners.is_current(&first));
+    assert!(owners.is_current(&second));
+}
+
+#[test]
+fn deactivated_nodes_keep_generation_tombstones() {
+    let initial = Generation::initial();
+    let next = initial.next().expect("generation space");
+    let mission = versioned_mission(initial);
+    let mut owners = ActiveOwners::default();
+
+    owners.activate_mission(mission).expect("new mission");
+    assert!(owners.deactivate_mission(mission.id));
+    assert_eq!(
+        owners.activate_mission(mission),
+        Err(OwnerError::GenerationNotAdvanced)
+    );
+    assert!(owners.activate_mission(versioned_mission(next)).is_ok());
+}
+
+#[test]
+fn deactivating_plan_invalidates_its_intents_only() {
+    let mut owners = ActiveOwners::default();
+    let mut allocator = OwnerAllocator::default();
+    let assignment = owners
+        .create_assignment(&mut allocator)
+        .expect("assignment");
+    let action = owners
+        .create_intent(&mut allocator, &assignment)
+        .expect("intent");
+    let mission = OwnerPath::new(assignment.mission(), None, None).expect("mission owner");
+
+    assert!(owners.deactivate_plan(assignment.plan().expect("plan").id));
+
+    assert!(owners.is_current(&mission));
+    assert!(!owners.is_current(&assignment));
+    assert!(!owners.is_current(&action));
+}
+
+#[test]
+fn deactivated_intent_requires_an_advanced_generation() {
+    let mut owners = ActiveOwners::default();
+    let mut allocator = OwnerAllocator::default();
+    let assignment = owners
+        .create_assignment(&mut allocator)
+        .expect("assignment");
+    let action = owners
+        .create_intent(&mut allocator, &assignment)
+        .expect("intent");
+    let mission = assignment.mission();
+    let plan = assignment.plan().expect("plan");
+    let intent = action.intent().expect("intent");
+    assert!(owners.deactivate_intent(intent.id));
+
+    assert_eq!(
+        owners.activate_intent(mission, plan, intent),
+        Err(OwnerError::GenerationNotAdvanced)
+    );
+    let advanced = Versioned::new(
+        intent.id,
+        intent.generation.next().expect("generation space"),
+    );
+    owners
+        .activate_intent(mission, plan, advanced)
+        .expect("advanced intent");
+    let replacement = OwnerPath::new(mission, Some(plan), Some(advanced)).expect("owner");
+    assert!(owners.is_current(&replacement));
+}
+
 fn versioned_mission(generation: Generation) -> Versioned<MissionId> {
     Versioned::new(MissionId::new(MISSION_KEY), generation)
 }

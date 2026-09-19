@@ -1,7 +1,7 @@
 use crate::ai::cognition;
 use crate::ai::mission::economy::{pioneer_max_hp, should_heal};
 use crate::ai::tactics::next_step;
-use crate::ai::{DecisionState, propose_owned};
+use crate::ai::{AssignmentKind, DecisionState, propose_owned};
 use crate::command::Arbiter;
 use crate::domain::{Action, Observation, OwnerError, PlayerTask, Role};
 use crate::rules::constants::{
@@ -28,7 +28,14 @@ pub fn assign(
     let action = choose_action(observation, pioneer, state);
     if let Some(action) = action {
         let submitted = matches!(action, Action::SubmitAnswer(_));
-        if propose_owned(state, arbiter, pioneer.id, action)? && submitted {
+        if propose_owned(
+            state,
+            arbiter,
+            pioneer.id,
+            action,
+            AssignmentKind::Challenge,
+        )? && submitted
+        {
             cognition::record_submission(observation, &mut state.challenge);
         }
     }

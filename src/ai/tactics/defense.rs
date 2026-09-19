@@ -1,6 +1,6 @@
 use std::collections::BTreeSet;
 
-use crate::ai::{DecisionState, propose_owned};
+use crate::ai::{AssignmentKind, DecisionState, propose_owned};
 use crate::command::Arbiter;
 use crate::domain::{Action, Observation, OwnerError, Pos, Role};
 use crate::rules::constants::{
@@ -45,7 +45,7 @@ pub fn defend(
             } else {
                 controller.id
             };
-            propose_owned(state, arbiter, actor, action)?;
+            propose_owned(state, arbiter, actor, action, AssignmentKind::Defense)?;
         }
     }
     Ok(())

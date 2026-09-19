@@ -92,6 +92,7 @@ pub struct OwnerPath {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum OwnerError {
     IntentWithoutPlan,
+    IntentAlreadyPresent,
     MissionNotCurrent,
     PlanNotCurrent,
     GenerationNotAdvanced,
@@ -127,23 +128,39 @@ impl OwnerPath {
     pub const fn intent(&self) -> Option<Versioned<IntentId>> {
         self.intent
     }
+
+    pub const fn assignment(&self) -> Self {
+        Self {
+            mission: self.mission,
+            plan: self.plan,
+            intent: None,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+struct MissionRegistration {
+    generation: Generation,
+    active: bool,
 }
 
 #[derive(Clone, Copy, Debug)]
 struct PlanRegistration {
     mission: Versioned<MissionId>,
     generation: Generation,
+    active: bool,
 }
 
 #[derive(Clone, Copy, Debug)]
 struct IntentRegistration {
     plan: Versioned<PlanId>,
     generation: Generation,
+    active: bool,
 }
 
 #[derive(Clone, Debug, Default)]
 pub struct ActiveOwners {
-    missions: BTreeMap<MissionId, Generation>,
+    missions: BTreeMap<MissionId, MissionRegistration>,
     plans: BTreeMap<PlanId, PlanRegistration>,
     intents: BTreeMap<IntentId, IntentRegistration>,
 }
@@ -173,42 +190,126 @@ impl OwnerAllocator {
 }
 
 impl ActiveOwners {
-    pub fn create_path(&mut self, allocator: &mut OwnerAllocator) -> Result<OwnerPath, OwnerError> {
+    pub fn create_assignment(
+        &mut self,
+        allocator: &mut OwnerAllocator,
+    ) -> Result<OwnerPath, OwnerError> {
         let id = allocator.allocate()?;
         let generation = Generation::initial();
         let mission = Versioned::new(MissionId::new(id), generation);
         let plan = Versioned::new(PlanId::new(id), generation);
-        let intent = Versioned::new(IntentId::new(id), generation);
-        if self.missions.contains_key(&mission.id)
-            || self.plans.contains_key(&plan.id)
-            || self.intents.contains_key(&intent.id)
-        {
+        if self.missions.contains_key(&mission.id) || self.plans.contains_key(&plan.id) {
             return Err(OwnerError::IdAlreadyRegistered);
         }
-        self.missions.insert(mission.id, generation);
+        self.missions.insert(
+            mission.id,
+            MissionRegistration {
+                generation,
+                active: true,
+            },
+        );
         self.plans.insert(
             plan.id,
             PlanRegistration {
                 mission,
                 generation,
+                active: true,
             },
         );
-        self.intents
-            .insert(intent.id, IntentRegistration { plan, generation });
         Ok(OwnerPath {
             mission,
             plan: Some(plan),
-            intent: Some(intent),
+            intent: None,
         })
     }
 
+    pub fn create_intent(
+        &mut self,
+        allocator: &mut OwnerAllocator,
+        assignment: &OwnerPath,
+    ) -> Result<OwnerPath, OwnerError> {
+        if assignment.intent.is_some() {
+            return Err(OwnerError::IntentAlreadyPresent);
+        }
+        let Some(plan) = assignment.plan else {
+            return Err(OwnerError::PlanNotCurrent);
+        };
+        if !self.plan_is_current(assignment.mission, plan) {
+            return Err(OwnerError::PlanNotCurrent);
+        }
+        let id = allocator.allocate()?;
+        let intent = Versioned::new(IntentId::new(id), Generation::initial());
+        if self.intents.contains_key(&intent.id) {
+            return Err(OwnerError::IdAlreadyRegistered);
+        }
+        self.intents.insert(
+            intent.id,
+            IntentRegistration {
+                plan,
+                generation: intent.generation,
+                active: true,
+            },
+        );
+        OwnerPath::new(assignment.mission, Some(plan), Some(intent))
+    }
+
+    pub fn create_path(&mut self, allocator: &mut OwnerAllocator) -> Result<OwnerPath, OwnerError> {
+        let assignment = self.create_assignment(allocator)?;
+        let result = self.create_intent(allocator, &assignment);
+        if result.is_err() {
+            self.deactivate_assignment(&assignment);
+        }
+        result
+    }
+
+    pub fn deactivate_assignment(&mut self, assignment: &OwnerPath) -> bool {
+        let mission_changed = self.deactivate_mission(assignment.mission.id);
+        let plan_changed = assignment
+            .plan
+            .is_some_and(|plan| self.deactivate_plan(plan.id));
+        mission_changed || plan_changed
+    }
+
     pub fn deactivate_mission(&mut self, mission: MissionId) -> bool {
-        self.missions.remove(&mission).is_some()
+        let Some(registered) = self.missions.get_mut(&mission) else {
+            return false;
+        };
+        let was_active = registered.active;
+        registered.active = false;
+        was_active
+    }
+
+    pub fn deactivate_plan(&mut self, plan: PlanId) -> bool {
+        let Some(registered) = self.plans.get_mut(&plan) else {
+            return false;
+        };
+        let was_active = registered.active;
+        registered.active = false;
+        was_active
+    }
+
+    pub fn deactivate_intent(&mut self, intent: IntentId) -> bool {
+        let Some(registered) = self.intents.get_mut(&intent) else {
+            return false;
+        };
+        let was_active = registered.active;
+        registered.active = false;
+        was_active
     }
 
     pub fn activate_mission(&mut self, mission: Versioned<MissionId>) -> Result<(), OwnerError> {
-        validate_generation(self.missions.get(&mission.id).copied(), mission.generation)?;
-        self.missions.insert(mission.id, mission.generation);
+        let current = self
+            .missions
+            .get(&mission.id)
+            .map(|registered| registered.generation);
+        validate_generation(current, mission.generation)?;
+        self.missions.insert(
+            mission.id,
+            MissionRegistration {
+                generation: mission.generation,
+                active: true,
+            },
+        );
         Ok(())
     }
 
@@ -226,6 +327,7 @@ impl ActiveOwners {
             PlanRegistration {
                 mission,
                 generation: plan.generation,
+                active: true,
             },
         );
         Ok(())
@@ -246,6 +348,7 @@ impl ActiveOwners {
             IntentRegistration {
                 plan,
                 generation: intent.generation,
+                active: true,
             },
         );
         Ok(())
@@ -269,18 +372,24 @@ impl ActiveOwners {
     }
 
     fn mission_is_current(&self, mission: Versioned<MissionId>) -> bool {
-        self.missions.get(&mission.id) == Some(&mission.generation)
+        self.missions.get(&mission.id).is_some_and(|registered| {
+            registered.active && registered.generation == mission.generation
+        })
     }
 
     fn plan_is_current(&self, mission: Versioned<MissionId>, plan: Versioned<PlanId>) -> bool {
         self.plans.get(&plan.id).is_some_and(|registered| {
-            registered.mission == mission && registered.generation == plan.generation
+            registered.active
+                && registered.mission == mission
+                && registered.generation == plan.generation
         })
     }
 
     fn intent_is_current(&self, plan: Versioned<PlanId>, intent: Versioned<IntentId>) -> bool {
         self.intents.get(&intent.id).is_some_and(|registered| {
-            registered.plan == plan && registered.generation == intent.generation
+            registered.active
+                && registered.plan == plan
+                && registered.generation == intent.generation
         })
     }
 }

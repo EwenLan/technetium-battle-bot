@@ -154,15 +154,21 @@ FSM 管理跨回合阶段，效用评分在状态允许的策略中做选择。�
 
 ## D27：真实回执保留原 owner，状态推进要求 owner 当前有效
 
-**状态：采纳，细化 D09/D13/D26。** 当前垂直切片为每个实际被仲裁接受的动作在决策草稿中确定分配完整 mission/plan/intent 路径，等待记录和 Step 报告保存同一路径；攻击使用武器 actor 查询裁判结果，并以 controller 作为 reporter。角色开始替代工作时撤销旧 mission 活动登记。
+**状态：采纳，细化 D09/D13/D26；其中逐动作分配整条路径已由 D28/D29 替代。** 当时的垂直切片为每个实际被仲裁接受的动作在决策草稿中确定分配完整 mission/plan/intent 路径，等待记录和 Step 报告保存同一路径；攻击使用武器 actor 查询裁判结果，并以 controller 作为 reporter。角色开始替代工作时撤销旧 mission 活动登记。
 
 对账先根据原 actor、发送回合和当前观测形成事实报告，无论 owner 是否仍有效；随后只有 `ActiveOwners::is_current` 通过，报告才能改变角色、任务和战术状态。因此取消或替代不能抹掉已经发生的裁判回执，迟到结果也不能推进新任务。owner 分配失败使整份决策草稿返回错误并输出空响应，不提交部分等待状态。当前每动作一条任务链是过渡模型；持久任务 DAG 落地后由 assignment 复用 mission/plan，只为新步骤生成 intent，并在提案和最终提交边界复验。
 
 ## D28：动作提案携带 owner，并在响应编译前复验
 
-**状态：采纳，细化 D17/D26/D27。** 简化 `ActionProposal` 在进入仲裁前携带 actor、action 和完整 OwnerPath。候选 owner 先在决策草稿中注册；本地动作或冲突校验失败时只撤销该候选，角色原工作不变。提案初次获准后才替换角色 owner；攻击以 controller 作为工作归属，以武器作为协议 actor。
+**状态：采纳，细化 D17/D26/D27；owner 创建粒度由 D29 继续细化。** 简化 `ActionProposal` 在进入仲裁前携带 actor、action 和完整 OwnerPath。候选 owner 先在决策草稿中注册；本地动作或冲突校验失败时只撤销该候选，角色原工作不变。提案初次获准后才替换角色 owner；攻击以 controller 作为工作归属，以武器作为协议 actor。
 
-`Arbiter::finish` 在生成 RoleCommand 和 accepted 集合前再次校验完整父链，期间已失效的提案不会编码，也不会创建 PendingAction。最终集合封装在 `ArbitrationResult` 内，只允许个体提交记录读取；个体层复用其中的 owner，不再另建路径。这使等待、回执与仲裁授权拥有同一身份，并保留 Session 草稿的原子提交性质。当前每动作仍创建一条临时完整链，且提案尚无 ProposalId、TurnStamp、claims、ExpectedEffect 和原子组；这些字段与持久 assignment、Reservation/ValidatedAction 留给 P2/P3 后续实现。
+`Arbiter::finish` 在生成 RoleCommand 和 accepted 集合前再次校验完整父链，期间已失效的提案不会编码，也不会创建 PendingAction。最终集合封装在 `ArbitrationResult` 内，只允许个体提交记录读取；个体层复用其中的 owner，不再另建路径。这使等待、回执与仲裁授权拥有同一身份，并保留 Session 草稿的原子提交性质。D29 已让同类工作跨动作复用 mission/plan；ProposalId、TurnStamp、claims、ExpectedEffect、原子组及正式 Reservation/ValidatedAction 仍留给 P2/P3。
+
+## D29：工作 assignment 复用 mission/plan，动作只替换 intent
+
+**状态：采纳，细化 D26–D28。** 当前垂直切片按 reporter 和 `Construction/Economy/Challenge/Defense` 工作族保存简化 assignment。相同工作族的后续动作沿用 mission/plan，并为每个候选创建新的 intent；只有提案获准才停用上一 intent。工作族改变时创建新 mission/plan/intent，并在获准后停用旧 assignment；本地拒绝只停用候选节点，原工作仍有效。攻击 assignment 归 controller，协议 actor 仍是武器。
+
+`ActiveOwners` 为三层注册都保留 generation 与 active 标志。停用节点不删除代次记录，同 ID 恢复必须使用更高 generation；停用 plan 只使该 plan 及其 intent 失效，停用 mission 使完整子链失效。分配器和 assignment 都位于 `DecisionState` 草稿，失败或丢弃的决策不会推进持久 ID。代价是当前工作族键比真实任务目标粗，同类不同目标可能共用 plan；后续 MissionSpec/DAG 应以稳定目标键、期限和租约替代该过渡键，而不改变逐步 intent 和完整父链校验规则。
 
 ## 变更规则
 

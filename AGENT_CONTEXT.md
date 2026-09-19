@@ -52,7 +52,7 @@ LLM 服务于新闻推理、宝藏线索和自进化任务，通过比赛的 `pr
 
 细化版设计已补充世界生命周期、各层状态行为/转移矩阵、10 类任务流程、类型化事件/上报目录，以及挑战、认知作业、新闻和宝藏子状态机。共用约束包括分阶段有限推进、保存未消费证据、报告作用域、取消代次和终止作业墓碑；动作提出、提交和效果确认分开处理。
 
-目标接口基线为 IF01–IF16，统一 TurnStamp/OwnerPath、任务规范与私有记录、意图/建议/已提交动作、类型化事件、资源租约与认知作业。当前已实现 OwnerPath/ActiveOwners 的完整父链代际校验、带 owner 的简化 ActionProposal、响应编译前复验、等待/Step 报告 owner 贯通，以及简化事件日志的按层 cursor/poll/ack；只有战略读者接入 Session 草稿。ResourceCoordinator、持久任务 DAG、正式提案元数据、共享 decision 模块、正式信封/报告路由与预测仓尚未实现。
+目标接口基线为 IF01–IF16，统一 TurnStamp/OwnerPath、任务规范与私有记录、意图/建议/已提交动作、类型化事件、资源租约与认知作业。当前已实现 OwnerPath/ActiveOwners 的完整父链代际校验与失效墓碑、四类工作族的简化 assignment、逐步 intent、带 owner 的 ActionProposal、响应编译前复验、等待/Step 报告 owner 贯通，以及简化事件日志的按层 cursor/poll/ack；只有战略读者接入 Session 草稿。ResourceCoordinator、带 MissionSpec/目标键的持久任务 DAG、正式提案元数据、共享 decision 模块、正式信封/报告路由与预测仓尚未实现。
 
 ## 4. 重要事实与待确认项
 
@@ -147,6 +147,14 @@ U01 已解决：用户确认基地 2×2，武器环为周围 4×4 减基地，�
 - `record_committed` 只接受 `ArbitrationResult`，不再分配 owner，因而不能用初验提案绕过最终校验；提案、响应授权、PendingAction 和 ExecutionReport 使用同一路径。
 - 新增本地拒绝事务、攻击控制者归属和最终失效提案不编码的回归测试；持久任务 assignment、正式提案 ID/stamp/claims/效果、ResourceCoordinator 和 ValidatedAction 仍待实现。
 - 验证通过：rustfmt、Clippy warnings-as-errors、47 个 Rust 测试（2 个单元、45 个集成）、locked release 构建、本机 HTTP 200 JSON 冒烟，以及本阶段文件长度和业务代码数字字面量审计。
+
+### 2026-09-20：复用工作 assignment 并按步骤替换 intent
+
+- `ActiveOwners` 的 mission/plan/intent 注册增加 active 状态；停用保留 generation 墓碑，支持整项 assignment、plan 或 intent 分层失效，完整链检查同时核对父关系、代次和活动状态。
+- `DecisionState` 按 reporter 和 Construction/Economy/Challenge/Defense 工作族保存简化 assignment；同类动作复用 mission/plan 并创建新 intent，换类才替换父任务，本地拒绝不影响原 assignment。
+- 分配和 ID 仍位于 Session 决策草稿；新增测试证明连续步骤父路径不变、旧 intent 失效、换类撤销旧任务、丢弃草稿不推进持久 ID，以及停用节点不能以相同 generation 复活。
+- 当前工作族键不含正式目标、期限、依赖和租约；MissionSpec/DAG、资源协调器与正式 ActionProposal 元数据仍待后续阶段。
+- 验证通过：rustfmt、Clippy warnings-as-errors、54 个 Rust 测试（5 个单元、49 个集成）、locked release 构建、本机 HTTP 200 JSON 冒烟，以及本阶段文件/函数长度和业务代码数字字面量审计。
 
 ## 6. 后续记录规范
 
