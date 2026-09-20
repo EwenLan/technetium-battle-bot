@@ -46,6 +46,7 @@ pub fn defend(
                 controller.id
             };
             propose_owned(
+                observation,
                 state,
                 arbiter,
                 actor,

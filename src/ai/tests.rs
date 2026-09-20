@@ -1,6 +1,8 @@
 use super::{DecisionState, propose_owned};
 use crate::command::Arbiter;
-use crate::domain::{Action, DeadlineKind, MissionDeadline, MissionSpec, OwnerPath, Pos, Role};
+use crate::domain::{
+    Action, DeadlineKind, MissionDeadline, MissionId, MissionSpec, OwnerPath, Pos, Role,
+};
 use crate::fsm::MissionState;
 use crate::protocol::decode;
 
@@ -16,6 +18,9 @@ const BUILDING_KIND: &str = "gatling";
 const BUILDING_ID: i64 = 90;
 const BUILDING_HP: i32 = 1000;
 const NEXT_ROUND: i32 = 2;
+const PIONEER_ID: i64 = 11;
+const PIONEER_MOVE_X: i32 = 4;
+const PIONEER_MOVE_Y: i32 = 2;
 
 #[test]
 fn rejected_owned_proposal_preserves_existing_work() {
@@ -31,6 +36,7 @@ fn rejected_owned_proposal_preserves_existing_work() {
     let previous = accept_move(&observation, &mut state, MissionSpec::economy());
 
     let accepted = propose_owned(
+        &observation,
         &mut state,
         &mut arbiter,
         WORKER_ID,
@@ -76,6 +82,7 @@ fn attack_owner_is_committed_to_the_controller() {
 
     assert!(
         propose_owned(
+            &observation,
             &mut state,
             &mut arbiter,
             WEAPON_ID,
@@ -249,6 +256,7 @@ fn timely_action_submission_keeps_the_mission_open_for_effects() {
     let mut arbiter = Arbiter::new(&observation);
     assert!(
         propose_owned(
+            &observation,
             &mut state,
             &mut arbiter,
             WORKER_ID,
@@ -280,6 +288,46 @@ fn timely_action_submission_keeps_the_mission_open_for_effects() {
     );
 }
 
+#[test]
+fn capability_filter_rejects_before_allocating_an_assignment() {
+    let observation = decode(DAY_REQUEST.as_bytes()).expect("fixture").observation;
+    let mut state = DecisionState::default();
+    let mut arbiter = Arbiter::new(&observation);
+    let action = Action::Move(Pos {
+        x: PIONEER_MOVE_X,
+        y: PIONEER_MOVE_Y,
+    });
+
+    assert!(
+        !propose_owned(
+            &observation,
+            &mut state,
+            &mut arbiter,
+            PIONEER_ID,
+            action.clone(),
+            MissionSpec::economy(),
+        )
+        .expect("capability filter")
+    );
+    assert!(state.role_owners.is_empty());
+    assert!(
+        propose_owned(
+            &observation,
+            &mut state,
+            &mut arbiter,
+            PIONEER_ID,
+            action,
+            MissionSpec::challenge(),
+        )
+        .expect("challenge proposal")
+    );
+    assert!(
+        state
+            .mission_view(MissionId::new(crate::rules::constants::ZERO_VERSION))
+            .is_some()
+    );
+}
+
 fn accept_move(
     observation: &crate::domain::Observation,
     state: &mut DecisionState,
@@ -290,7 +338,10 @@ fn accept_move(
         x: MOVE_X,
         y: MOVE_Y,
     });
-    assert!(propose_owned(state, &mut arbiter, WORKER_ID, action, spec).expect("proposal"));
+    assert!(
+        propose_owned(observation, state, &mut arbiter, WORKER_ID, action, spec,)
+            .expect("proposal")
+    );
     let arbitration = arbiter.finish(&state.active_owners);
     assert!(
         arbitration

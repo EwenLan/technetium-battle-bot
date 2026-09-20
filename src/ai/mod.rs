@@ -252,12 +252,17 @@ impl DecisionState {
 }
 
 pub(crate) fn propose_owned(
+    observation: &Observation,
     state: &mut DecisionState,
     arbiter: &mut Arbiter<'_>,
     actor: i64,
     action: Action,
     spec: MissionSpec,
 ) -> Result<bool, DecisionError> {
+    let reporter = action_reporter(actor, &action);
+    if mission::check_assignment(observation, reporter, &spec).is_err() {
+        return Ok(false);
+    }
     let prepared = state.prepare_action(actor, action, spec)?;
     if arbiter.propose(&prepared.proposal, &state.active_owners) {
         state.commit_proposal(&prepared)?;

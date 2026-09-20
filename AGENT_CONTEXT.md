@@ -52,7 +52,7 @@ LLM 服务于新闻推理、宝藏线索和自进化任务，通过比赛的 `pr
 
 细化版设计已补充世界生命周期、各层状态行为/转移矩阵、10 类任务流程、类型化事件/上报目录，以及挑战、认知作业、新闻和宝藏子状态机。共用约束包括分阶段有限推进、保存未消费证据、报告作用域、取消代次和终止作业墓碑；动作提出、提交和效果确认分开处理。
 
-目标接口基线为 IF01–IF16，统一 TurnStamp/OwnerPath、任务规范与私有记录、意图/建议/已提交动作、类型化事件、资源租约与认知作业。当前已实现 OwnerPath/ActiveOwners 的完整父链代际校验与失效墓碑、完整基础 MissionSpec、持久 MissionRegistry、建设/挑战结束/守备窗口目标证据、三类期限守卫、依赖与终态传播、逐步 intent、带 owner 的 ActionProposal、响应编译前复验、等待/Step 报告 owner 贯通，以及简化事件日志的按层 cursor/poll/ack；只有战略读者接入 Session 草稿。ResourceCoordinator、自动任务分解、经济目标证据、能力过滤/期限生成、完整 MissionRecord 进展字段、正式提案元数据、共享 decision 模块、正式信封/报告路由与预测仓尚未实现。
+目标接口基线为 IF01–IF16，统一 TurnStamp/OwnerPath、任务规范与私有记录、意图/建议/已提交动作、类型化事件、资源租约与认知作业。当前已实现 OwnerPath/ActiveOwners 的完整父链代际校验与失效墓碑、完整基础 MissionSpec、角色能力准入、持久 MissionRegistry、建设/挑战结束/守备窗口目标证据、三类期限守卫、依赖与终态传播、逐步 intent、带 owner 的 ActionProposal、响应编译前复验、等待/Step 报告 owner 贯通，以及简化事件日志的按层 cursor/poll/ack；只有战略读者接入 Session 草稿。ResourceCoordinator、自动任务分解、经济目标证据、期限生成、完整 MissionRecord 进展字段、正式提案元数据、共享 decision 模块、正式信封/报告路由与预测仓尚未实现。
 
 ## 4. 重要事实与待确认项
 
@@ -187,6 +187,13 @@ U01 已解决：用户确认基地 2×2，武器环为周围 4×4 减基地，�
 - 区分期限种类：EffectObservation/InternalPlanning 拒绝窗口外证据；ActionSubmission 仅记录与 goal 匹配的 Sell/Build/SubmitAnswer/Attack，准备移动不算提交，按时提交后允许等待效果。
 - 经济循环仍保持 Pending，自动策略仍不创建依赖/deadline；能力过滤、自动 DAG、租约及完整 progress/checkpoint 留待后续阶段。
 - 验证通过：rustfmt、Clippy warnings-as-errors、73 个 Rust 测试（9 个单元、64 个集成）、locked release 构建、本机 HTTP 200 JSON 冒烟，以及本阶段文件/函数长度和数字字面量审计。
+
+### 2026-09-20：角色能力准入
+
+- 新增统一 role capability profile：工人提供采集、出售、建设、操炮，开拓者提供挑战求解、操炮；required_capabilities 必须全部满足。
+- 能力检查区分角色缺失、死亡、生命未知和缺少具体能力；攻击使用 controller 作为 assignee，武器继续作为协议 actor。
+- `propose_owned` 在创建 owner/intent 前执行检查，本地能力拒绝不推进分配器、不注册任务、不替换原工作；Arbiter 继续复验具体动作合法性。
+- 验证通过：rustfmt、Clippy warnings-as-errors、77 个 Rust 测试（10 个单元、67 个集成）、locked release 构建、本机 HTTP 200 JSON 冒烟，以及文件/函数长度、分支循环和数字字面量审计。
 
 ## 6. 后续记录规范
 

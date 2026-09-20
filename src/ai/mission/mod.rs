@@ -1,3 +1,4 @@
+mod capability;
 mod construction;
 mod economy;
 mod goal;
@@ -6,6 +7,7 @@ mod pioneer;
 mod record;
 mod registry;
 
+pub use capability::{CapabilityRejection, check_assignment, role_capabilities};
 pub use construction::BuildPlan;
 pub use goal::{GoalEvaluation, GoalEvidence, evaluate_goal};
 pub use record::{
@@ -79,7 +81,7 @@ fn assign_worker(
     };
     let (tactical_state, individual_state) = state_for_action(&action);
     let building = matches!(action, crate::domain::Action::Build { .. });
-    if !propose_owned(state, arbiter, worker.id, action, spec)? {
+    if !propose_owned(observation, state, arbiter, worker.id, action, spec)? {
         return Ok(());
     }
     if building {

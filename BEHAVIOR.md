@@ -293,7 +293,7 @@ W1/W2 偏好只在任务等级、期限、效用和行程等指标相同后用�
 
 所有非终态适用 G01/G03 的取消传播；W.Degraded 冻结执行而非批量 Failed。任务死亡处理依可替代性决定，不把所有 UnitDied 一律映射 Failed。Assigned 的握手只用 INTERFACES 中的 MissionActivated，不新增同义事件。
 
-当前不可变 MissionSpec 已固定 GoalPredicate、target、dependencies、required capabilities、MissionDeadline、Q0–Q4 priority、interruptibility 和 RetryPolicy，完整契约变化会更换 assignment。`MissionRegistry::reconcile` 已按 G05/G06 处理建设实体、ChallengeEnded、白昼 PhaseChanged 与 AllOf 证据，保存证据来源回合；Succeeded 解锁依赖，期限未满足时根任务 Expired、后代 Cancelled。EffectObservation/InternalPlanning 拒绝迟到证据；ActionSubmission 仅由匹配目标的实际提交满足 checkpoint，按时提交后可等待效果。实时策略仍只创建无依赖、无 deadline 任务；经济周期证据、能力过滤、自动 DAG/期限生成、Failed/Suspended、租约和完整进展字段仍须按本表补齐。
+当前不可变 MissionSpec 已固定 GoalPredicate、target、dependencies、required capabilities、MissionDeadline、Q0–Q4 priority、interruptibility 和 RetryPolicy，完整契约变化会更换 assignment。`check_assignment` 已落实 BH05 的工种硬过滤和存活守卫，攻击按 controller 准入；不匹配候选在 owner 分配前拒绝。`MissionRegistry::reconcile` 已按 G05/G06 处理基础目标证据与期限终态。实时策略仍只创建无依赖、无 deadline 任务；经济周期证据、自动 DAG/期限生成、Failed/Suspended、租约和完整进展字段仍须按本表补齐。
 
 ## 7. 战术 T 与个体 I：计划、动作和恢复
 

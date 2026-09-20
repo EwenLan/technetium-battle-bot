@@ -70,7 +70,7 @@ run.sh                     # 当前比赛服务入口：bash run.sh <port>
 | --- | --- | --- |
 | 服务/协议 | 有界 HTTP 请求、POST、类型化 JSON、重复键拒绝、同轮同负载字节缓存、完整空响应 | 官方路由/运行环境联调、结构化日志、完整事务与截止回滚 |
 | 世界/事件 | `ColdStart/Ready/Degraded` 生命周期、有效快照保留/恢复、稳定 ID 的有界事件日志、按层独立消费游标/确认/截断检测、实体差分、敌人记忆及两格任务点合并 | `Closed` 会话信号、三类知识和完整实体索引、预测/来源、事件信封过滤与报告路由 |
-| 战略/任务 | 昼夜/返防/终盘/紧急风险近似，基础采售、动态建造环内三炮建设、开拓者接题；MissionSpec 已含目标、依赖、能力、期限和调度策略，MissionRegistry 支持依赖解锁、取消传播和活动任务替换 | 自动任务分解、目标证据求值、能力过滤、截止驱动、指令/预算、全队租约分配及完整 MissionRecord 进展字段 |
+| 战略/任务 | 昼夜/返防/终盘/紧急风险近似，基础采售、动态建造环内三炮建设、开拓者接题；MissionSpec、角色能力准入、基础目标/期限对账、依赖解锁和取消传播 | 自动任务分解、经济周期证据、自动期限生成、指令/预算、全队租约分配及完整 MissionRecord 进展字段 |
 | 战术/个体 | 八向 A*、夜间炮位移动/基础攻击；每步 ActionProposal 获得新 intent，仲裁双重校验完整 owner，等待/Step 报告复用该路径 | 正式提案 ID/stamp/claims/效果、资源账本、联合火力、弹道、动作效果证据与完整七态个体 FSM |
 | 认知/扩展 | 单次题目 prompt 与下一回合答案提交、有限新闻原文记忆 | 作业代次/额度/沙盒/SOP、新闻解析、宝藏、回放 |
 
@@ -490,7 +490,7 @@ stateDiagram-v2
 
 每轮决策先对活动任务求值。`GoalEvidence` 保存观测实体或稳定事件 ID 及来源回合：建设检查指定格的存活己方建筑，挑战结束和守备窗口分别要求 `ChallengeEnded` 与进入白昼的 `PhaseChanged`，`AllOf` 要求全部子目标满足；经济循环在没有采集/出售 checkpoint 前保持 Pending。Succeeded 保存去重证据并解锁依赖。EffectObservation/InternalPlanning 的证据必须落在 deadline 窗口内；ActionSubmission 只把匹配目标的 Sell/Build/SubmitAnswer/Attack 记作 checkpoint，按时提交后允许效果迟到。窗口已错过且无有效提交时根任务 Expired、依赖后代 Cancelled，对应 ActiveOwners 同步失效，迟到证据不复活终态。
 
-经济循环与挑战会话使用固定目标键，建设使用建造格，守备用武器 ID；只有完整 spec 相同的后续动作才复用 mission/plan 并创建新 intent，因而 deadline、priority 或策略改变也会建立新 assignment。新任务获准后才取消旧任务及依赖后代，取消结果同时失效 ActiveOwners 父链。仲裁接收及编译响应时均调用 `ActiveOwners::is_current`，`PendingAction` 和下一帧 `ExecutionReport` 复用动作路径。当前自动策略仍未创建依赖/deadline，也未按 required capabilities 过滤；租约、完整 checkpoint/progress、MissionFactory、AssignmentSolver 和 ResourceCoordinator 仍待实现。
+经济循环与挑战会话使用固定目标键，建设使用建造格，守备用武器 ID；只有完整 spec 相同的后续动作才复用 mission/plan 并创建新 intent，因而 deadline、priority 或策略改变也会建立新 assignment。提案先用当前观测角色检查 required capabilities：工人提供 Gather/Sell/Build/OperateWeapon，开拓者提供 SolveChallenge/OperateWeapon；缺失、死亡、生命未知或缺少任一能力均在创建 owner 前拒绝。攻击检查 controller，协议 actor 仍是武器。新任务获准后才取消旧任务及依赖后代，取消结果同时失效 ActiveOwners 父链。仲裁接收及编译响应时均调用 `ActiveOwners::is_current`，`PendingAction` 和下一帧 `ExecutionReport` 复用动作路径。当前自动策略仍未创建依赖/deadline；租约、完整 checkpoint/progress、MissionFactory、全队 AssignmentSolver 和 ResourceCoordinator 仍待实现。
 
 | status / reason 示例 | 产生时机与证据 | 父层需要做什么 |
 | --- | --- | --- |

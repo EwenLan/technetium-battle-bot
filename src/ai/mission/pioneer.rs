@@ -28,7 +28,14 @@ pub fn assign(
     let action = choose_action(observation, pioneer, state);
     if let Some(action) = action {
         let submitted = matches!(action, Action::SubmitAnswer(_));
-        if propose_owned(state, arbiter, pioneer.id, action, MissionSpec::challenge())? && submitted
+        if propose_owned(
+            observation,
+            state,
+            arbiter,
+            pioneer.id,
+            action,
+            MissionSpec::challenge(),
+        )? && submitted
         {
             cognition::record_submission(observation, &mut state.challenge);
         }
