@@ -2,6 +2,7 @@ use crate::domain::{MissionId, MissionSpec, OwnerPath};
 use crate::fsm::MissionState;
 
 use super::GoalEvidence;
+use super::progress::EconomyProgress;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct MissionCancellation {
@@ -43,6 +44,7 @@ pub struct MissionView {
     state: MissionState,
     completion_evidence: Vec<GoalEvidence>,
     goal_submission_round: Option<i32>,
+    progress_evidence: Vec<GoalEvidence>,
 }
 
 impl MissionView {
@@ -70,6 +72,10 @@ impl MissionView {
         self.goal_submission_round
     }
 
+    pub fn progress_evidence(&self) -> &[GoalEvidence] {
+        &self.progress_evidence
+    }
+
     pub fn dependencies(&self) -> &std::collections::BTreeSet<MissionId> {
         self.spec.dependencies()
     }
@@ -83,6 +89,7 @@ pub(super) struct MissionRecord {
     pub(super) state: MissionState,
     pub(super) completion_evidence: Vec<GoalEvidence>,
     pub(super) goal_submission_round: Option<i32>,
+    pub(super) economy_progress: EconomyProgress,
 }
 
 impl MissionRecord {
@@ -94,6 +101,7 @@ impl MissionRecord {
             state: self.state,
             completion_evidence: self.completion_evidence.clone(),
             goal_submission_round: self.goal_submission_round,
+            progress_evidence: self.economy_progress.evidence().to_vec(),
         }
     }
 }

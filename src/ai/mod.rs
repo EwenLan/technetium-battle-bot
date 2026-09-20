@@ -233,10 +233,10 @@ impl DecisionState {
         owner: &OwnerPath,
         actor: i64,
         action: &Action,
-        round: i32,
+        observation: &Observation,
     ) {
         self.mission_registry
-            .record_action_commit(owner, actor, action, round);
+            .record_action_commit(owner, actor, action, observation);
     }
 
     pub(crate) fn cancel_mission(&mut self, owner: &OwnerPath) {
@@ -295,7 +295,7 @@ pub fn decide(
     let mut arbiter = Arbiter::new(observation);
     mission::assign(observation, state, &mut arbiter, deadline)?;
     let arbitration = arbiter.finish(&state.active_owners);
-    individual::record_committed(observation.round_no, &arbitration, state);
+    individual::record_committed(observation, &arbitration, state);
     let mut response = arbitration.response;
     response.prompt = cognition::prepare_prompt(observation, &mut state.challenge);
     Ok(response)

@@ -266,14 +266,14 @@ fn timely_action_submission_keeps_the_mission_open_for_effects() {
         .expect("proposal")
     );
     let arbitration = arbiter.finish(&state.active_owners);
-    super::individual::record_committed(observation.round_no, &arbitration, &mut state);
+    super::individual::record_committed(&observation, &arbitration, &mut state);
     let owner = *state.role_owners.get(&WORKER_ID).expect("role owner");
     observation.round_no = NEXT_ROUND;
     let late_action = Action::Build {
         name: BUILDING_KIND.to_owned(),
         pos: site,
     };
-    state.record_mission_action(&owner, WORKER_ID, &late_action, observation.round_no);
+    state.record_mission_action(&owner, WORKER_ID, &late_action, &observation);
 
     state.reconcile_missions(&observation, &[]);
 

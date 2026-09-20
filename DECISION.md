@@ -1,6 +1,6 @@
 # 重大设计决策
 
-> 更新：2026-09-20。以下“采纳”表示设计已选定，实际实现范围见 [HANDOFF.md](HANDOFF.md)；“暂定”需要裁判/环境验证。记录结论、依据、代价与调整条件。
+> 更新：2026-09-21。以下“采纳”表示设计已选定，实际实现范围见 [HANDOFF.md](HANDOFF.md)；“暂定”需要裁判/环境验证。记录结论、依据、代价与调整条件。
 
 ## D01：分层 FSM 与显式职责边界
 
@@ -199,6 +199,12 @@ EffectObservation 与 InternalPlanning 要求完成证据落在 deadline 窗口�
 **状态：采纳，落实 D20 和 BH05 的基础能力过滤。** 当前角色能力只由观测中的 roleType 和可靠生命值生成：worker 提供 Gather、Sell、Build、OperateWeapon，pioneer 提供 SolveChallenge、OperateWeapon。MissionSpec.required_capabilities 必须是该集合的子集；角色不存在、确认死亡、生命未知或缺少具体能力分别形成类型化 CapabilityRejection。攻击的任务 assignee 是 controller，能力检查不把武器 actor 当作角色。
 
 `propose_owned` 在创建 mission/plan/intent 及替换旧工作前执行准入，不匹配候选按正常不可行结果返回，不消耗 owner ID，也不改变现有 assignment。动作仲裁仍负责动作级工种、站位、阶段和资源复验，能力准入不替代最终合法性检查。代价是当前能力表仍是两类角色的静态规则；未来购买物品、冷却、任务租约和临时不可用性进入 AvailabilityView，不应膨胀 MissionCapability。
+
+## D35：经济任务以跨步效果证据完成
+
+**状态：采纳，补全 D33 的 `EconomyCycleCompleted` checkpoint。** 任务记录在实际提交 Collect 时保存物品种类、执行角色的提交前数量和预计效果回合；下一帧必须同时出现该物品数量增加与同角色 `InventoryChanged` 事件，才记录本任务的采集证据。实际提交 Sell 时保存出售后预期余量和提交前团队金币；只有任务已有采集证据，且下一帧同时出现指定物品减少、同角色背包事件，以及从保存基线开始的正向 `GoldChanged`，才完成经济循环。
+
+单次合法回执、任务开始前已有库存或无归属的金币变化均不足以完成目标。checkpoint 与证据由私有 MissionRecord 持有，MissionView 只公开稳定证据副本。共享金币缺少交易流水时，并发消费可能抵消出售收入；当前宁可保持 Pending，也不虚构收益归属。后续 ResourceCoordinator 或动作效果账本可在不改变完成语义的前提下分解净变化。
 
 ## 变更规则
 

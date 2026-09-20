@@ -1,7 +1,7 @@
 # Agent 上下文记录
 
 > 用途：保存开发过程中的用户要求、仓库事实、验证证据和工作进度，帮助后续大模型继续工作。记录可检查的结论与简要理由，不保存逐字聊天、隐私、密钥或未经验证的推断。
-> 更新：2026-09-20。此文件不是比赛中发送给 LLM 的 prompt，也不是运行时长期记忆库。
+> 更新：2026-09-21。此文件不是比赛中发送给 LLM 的 prompt，也不是运行时长期记忆库。
 
 ## 1. 当前用户需求
 
@@ -52,7 +52,7 @@ LLM 服务于新闻推理、宝藏线索和自进化任务，通过比赛的 `pr
 
 细化版设计已补充世界生命周期、各层状态行为/转移矩阵、10 类任务流程、类型化事件/上报目录，以及挑战、认知作业、新闻和宝藏子状态机。共用约束包括分阶段有限推进、保存未消费证据、报告作用域、取消代次和终止作业墓碑；动作提出、提交和效果确认分开处理。
 
-目标接口基线为 IF01–IF16，统一 TurnStamp/OwnerPath、任务规范与私有记录、意图/建议/已提交动作、类型化事件、资源租约与认知作业。当前已实现 OwnerPath/ActiveOwners 的完整父链代际校验与失效墓碑、完整基础 MissionSpec、角色能力准入、持久 MissionRegistry、建设/挑战结束/守备窗口目标证据、三类期限守卫、依赖与终态传播、逐步 intent、带 owner 的 ActionProposal、响应编译前复验、等待/Step 报告 owner 贯通，以及简化事件日志的按层 cursor/poll/ack；只有战略读者接入 Session 草稿。ResourceCoordinator、自动任务分解、经济目标证据、期限生成、完整 MissionRecord 进展字段、正式提案元数据、共享 decision 模块、正式信封/报告路由与预测仓尚未实现。
+目标接口基线为 IF01–IF16，统一 TurnStamp/OwnerPath、任务规范与私有记录、意图/建议/已提交动作、类型化事件、资源租约与认知作业。当前已实现 OwnerPath/ActiveOwners 的完整父链代际校验与失效墓碑、完整基础 MissionSpec、角色能力准入、持久 MissionRegistry、建设/挑战结束/守备窗口目标证据、经济任务跨步采售证据、三类期限守卫、依赖与终态传播、逐步 intent、带 owner 的 ActionProposal、响应编译前复验、等待/Step 报告 owner 贯通，以及简化事件日志的按层 cursor/poll/ack；只有战略读者接入 Session 草稿。ResourceCoordinator、自动任务分解、期限生成、其他任务进展字段、正式提案元数据、共享 decision 模块、正式信封/报告路由与预测仓尚未实现。
 
 ## 4. 重要事实与待确认项
 
@@ -194,6 +194,13 @@ U01 已解决：用户确认基地 2×2，武器环为周围 4×4 减基地，�
 - 能力检查区分角色缺失、死亡、生命未知和缺少具体能力；攻击使用 controller 作为 assignee，武器继续作为协议 actor。
 - `propose_owned` 在创建 owner/intent 前执行检查，本地能力拒绝不推进分配器、不注册任务、不替换原工作；Arbiter 继续复验具体动作合法性。
 - 验证通过：rustfmt、Clippy warnings-as-errors、77 个 Rust 测试（10 个单元、67 个集成）、locked release 构建、本机 HTTP 200 JSON 冒烟，以及文件/函数长度、分支循环和数字字面量审计。
+
+### 2026-09-21：经济任务跨步进展与完成证据
+
+- `MissionRecord` 新增私有经济 checkpoint、稳定事件证据和出售确认；`MissionView` 只公开可审计的进展证据，不泄露可变记录。
+- Collect 提交保存指定物品的角色背包基线，下一帧以数量增加和同角色 `InventoryChanged` 共同确认；Sell 提交保存预期余量与金币基线，只有此前已有本任务采集证据，且下一帧物品减少、同角色背包事件和正向 `GoldChanged` 同时成立，目标才进入 Succeeded。
+- 合法动作、任务前已有库存、单独背包减少或无法从保存基线归因的金币变化均不会误报成功；并发消费掩盖出售净增时保守保持 Pending，待 ResourceCoordinator 或动作效果账本提供细分流水。
+- 新增完整采售成功、出售旧库存和缺少正向金币证据的回归测试；已通过 rustfmt、Clippy warnings-as-errors、80 个 Rust 测试（13 个单元、67 个集成）、locked release 构建、本机 HTTP 200 JSON 冒烟，以及文件/函数长度、分支循环和数字字面量审计。
 
 ## 6. 后续记录规范
 

@@ -46,6 +46,7 @@ impl MissionRegistry {
                 state,
                 completion_evidence: Vec::new(),
                 goal_submission_round: None,
+                economy_progress: super::progress::EconomyProgress::default(),
             },
         );
         Ok(mission)
@@ -160,18 +161,18 @@ impl MissionRegistry {
         owner: &OwnerPath,
         actor: i64,
         action: &Action,
-        round: i32,
+        input: &crate::domain::Observation,
     ) -> bool {
         let Some(record) = self.records.get_mut(&owner.mission().id) else {
             return false;
         };
-        if record.owner != owner.assignment()
-            || !is_active(record.state)
-            || !action_submits_goal(record.spec.goal(), actor, action)
-        {
+        if record.owner != owner.assignment() || !is_active(record.state) {
             return false;
         }
-        record.goal_submission_round.get_or_insert(round);
+        super::progress::record_action(record, action, input);
+        if action_submits_goal(record.spec.goal(), actor, action) {
+            record.goal_submission_round.get_or_insert(input.round_no);
+        }
         true
     }
 

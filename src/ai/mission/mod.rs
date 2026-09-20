@@ -4,8 +4,12 @@ mod economy;
 mod goal;
 mod lifecycle;
 mod pioneer;
+mod progress;
 mod record;
 mod registry;
+
+#[cfg(test)]
+mod progress_tests;
 
 pub use capability::{CapabilityRejection, check_assignment, role_capabilities};
 pub use construction::BuildPlan;

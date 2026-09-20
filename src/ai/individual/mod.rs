@@ -14,10 +14,19 @@ pub struct PendingAction {
     pub sent_round: i32,
 }
 
-pub fn record_committed(round: i32, arbitration: &ArbitrationResult, state: &mut DecisionState) {
+pub fn record_committed(
+    observation: &Observation,
+    arbitration: &ArbitrationResult,
+    state: &mut DecisionState,
+) {
     for proposal in arbitration.accepted() {
         let reporter = proposal.reporter();
-        state.record_mission_action(proposal.owner(), proposal.actor(), proposal.action(), round);
+        state.record_mission_action(
+            proposal.owner(),
+            proposal.actor(),
+            proposal.action(),
+            observation,
+        );
         state.pending_actions.insert(
             reporter,
             PendingAction {
@@ -25,7 +34,7 @@ pub fn record_committed(round: i32, arbitration: &ArbitrationResult, state: &mut
                 reporter,
                 owner: *proposal.owner(),
                 action: proposal.action().clone(),
-                sent_round: round,
+                sent_round: observation.round_no,
             },
         );
         state

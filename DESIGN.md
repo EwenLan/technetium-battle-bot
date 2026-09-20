@@ -1,6 +1,6 @@
 # 项目核心框架设计
 
-> 更新：2026-09-20。状态：目标架构与首个可运行切片并存；本文件的完整状态机、接口和性能指标仍是待完成规格，实际进度见 [HANDOFF.md](HANDOFF.md)。
+> 更新：2026-09-21。状态：目标架构与首个可运行切片并存；本文件的完整状态机、接口和性能指标仍是待完成规格，实际进度见 [HANDOFF.md](HANDOFF.md)。
 > 依据：[任务书](docs/docs/任务书.md)、[接口文档](docs/docs/接口文档.md)（均为 v1.0，2026-09-09）、请求/响应示例，以及 `docs/Demo/CoreGeek.tar.gz` 内的参考实现。Demo 仅提供实现线索，不是判题器规范。
 
 实现细节导航：世界模型的工作/状态见 4.4–4.5；四层 FSM 的状态行为与完整转移表见第 6 节；事件字段、生产者、消费者及上报处理见第 7 节；挑战、认知作业与宝藏子状态机见 10.3–10.5；必须验证的状态切换场景见 11.1。
@@ -70,7 +70,7 @@ run.sh                     # 当前比赛服务入口：bash run.sh <port>
 | --- | --- | --- |
 | 服务/协议 | 有界 HTTP 请求、POST、类型化 JSON、重复键拒绝、同轮同负载字节缓存、完整空响应 | 官方路由/运行环境联调、结构化日志、完整事务与截止回滚 |
 | 世界/事件 | `ColdStart/Ready/Degraded` 生命周期、有效快照保留/恢复、稳定 ID 的有界事件日志、按层独立消费游标/确认/截断检测、实体差分、敌人记忆及两格任务点合并 | `Closed` 会话信号、三类知识和完整实体索引、预测/来源、事件信封过滤与报告路由 |
-| 战略/任务 | 昼夜/返防/终盘/紧急风险近似，基础采售、动态建造环内三炮建设、开拓者接题；MissionSpec、角色能力准入、基础目标/期限对账、依赖解锁和取消传播 | 自动任务分解、经济周期证据、自动期限生成、指令/预算、全队租约分配及完整 MissionRecord 进展字段 |
+| 战略/任务 | 昼夜/返防/终盘/紧急风险近似，基础采售、动态建造环内三炮建设、开拓者接题；MissionSpec、能力准入、基础目标/期限、经济跨步证据、依赖与终态传播 | 自动任务分解、自动期限生成、指令/预算、全队租约分配及其他 MissionRecord 进展字段 |
 | 战术/个体 | 八向 A*、夜间炮位移动/基础攻击；每步 ActionProposal 获得新 intent，仲裁双重校验完整 owner，等待/Step 报告复用该路径 | 正式提案 ID/stamp/claims/效果、资源账本、联合火力、弹道、动作效果证据与完整七态个体 FSM |
 | 认知/扩展 | 单次题目 prompt 与下一回合答案提交、有限新闻原文记忆 | 作业代次/额度/沙盒/SOP、新闻解析、宝藏、回放 |
 
@@ -488,9 +488,9 @@ stateDiagram-v2
 
 当前垂直切片由 `MissionRegistry` 按 MissionId 保存私有 MissionRecord，并以 reporter 索引活动任务，对外只返回 MissionView。不可变 MissionSpec 包含 kind、objective、GoalPredicate、前置 MissionId、required capabilities、MissionDeadline、Q0–Q4 PriorityClass、Interruptibility 和 RetryPolicy；建设目标把建筑类型和坐标同时写入目标谓词。依赖只存一份在 spec 中，注册时未知、自依赖或已不可用的前置会被拒绝；全部前置成功后 Proposed 进入 Ready，任务成功会唤醒所有前置均满足的待命者，取消会确定性传播到依赖子树。活动任务依次经过 Ready → Assigned → Executing；动作失败置 Blocked，下一次获准动作恢复 Executing。
 
-每轮决策先对活动任务求值。`GoalEvidence` 保存观测实体或稳定事件 ID 及来源回合：建设检查指定格的存活己方建筑，挑战结束和守备窗口分别要求 `ChallengeEnded` 与进入白昼的 `PhaseChanged`，`AllOf` 要求全部子目标满足；经济循环在没有采集/出售 checkpoint 前保持 Pending。Succeeded 保存去重证据并解锁依赖。EffectObservation/InternalPlanning 的证据必须落在 deadline 窗口内；ActionSubmission 只把匹配目标的 Sell/Build/SubmitAnswer/Attack 记作 checkpoint，按时提交后允许效果迟到。窗口已错过且无有效提交时根任务 Expired、依赖后代 Cancelled，对应 ActiveOwners 同步失效，迟到证据不复活终态。
+每轮决策先对活动任务求值。`GoalEvidence` 保存观测实体或稳定事件 ID 及来源回合：建设检查指定格的存活己方建筑，挑战结束和守备窗口分别要求 `ChallengeEnded` 与进入白昼的 `PhaseChanged`，`AllOf` 要求全部子目标满足。GatherAndSell 在动作提交时保存物品/金币基线与下一效果回合；采集须看到该工人的指定矿物增加，出售须属于同一任务、看到该矿物按量减少及从基线开始的正向 GoldChanged，完成证据合并采集/出售事件。预存库存、单独金币变化或合法性 bool 均不能完成任务；并发支出遮蔽净增长时保守 Pending。Succeeded 保存去重证据并解锁依赖。EffectObservation/InternalPlanning 的证据必须落在 deadline 窗口内；ActionSubmission 只把匹配目标的 Sell/Build/SubmitAnswer/Attack 记作 checkpoint，按时提交后允许效果迟到。窗口已错过且无有效提交时根任务 Expired、依赖后代 Cancelled，对应 ActiveOwners 同步失效，迟到证据不复活终态。
 
-经济循环与挑战会话使用固定目标键，建设使用建造格，守备用武器 ID；只有完整 spec 相同的后续动作才复用 mission/plan 并创建新 intent，因而 deadline、priority 或策略改变也会建立新 assignment。提案先用当前观测角色检查 required capabilities：工人提供 Gather/Sell/Build/OperateWeapon，开拓者提供 SolveChallenge/OperateWeapon；缺失、死亡、生命未知或缺少任一能力均在创建 owner 前拒绝。攻击检查 controller，协议 actor 仍是武器。新任务获准后才取消旧任务及依赖后代，取消结果同时失效 ActiveOwners 父链。仲裁接收及编译响应时均调用 `ActiveOwners::is_current`，`PendingAction` 和下一帧 `ExecutionReport` 复用动作路径。当前自动策略仍未创建依赖/deadline；租约、完整 checkpoint/progress、MissionFactory、全队 AssignmentSolver 和 ResourceCoordinator 仍待实现。
+经济循环与挑战会话使用固定目标键，建设使用建造格，守备用武器 ID；只有完整 spec 相同的后续动作才复用 mission/plan 并创建新 intent，因而 deadline、priority 或策略改变也会建立新 assignment。提案先用当前观测角色检查 required capabilities：工人提供 Gather/Sell/Build/OperateWeapon，开拓者提供 SolveChallenge/OperateWeapon；缺失、死亡、生命未知或缺少任一能力均在创建 owner 前拒绝。攻击检查 controller，协议 actor 仍是武器。新任务获准后才取消旧任务及依赖后代，取消结果同时失效 ActiveOwners 父链。仲裁接收及编译响应时均调用 `ActiveOwners::is_current`，`PendingAction` 和下一帧 `ExecutionReport` 复用动作路径。当前自动策略仍未创建依赖/deadline；租约、其他任务 checkpoint/progress、MissionFactory、全队 AssignmentSolver 和 ResourceCoordinator 仍待实现。
 
 | status / reason 示例 | 产生时机与证据 | 父层需要做什么 |
 | --- | --- | --- |

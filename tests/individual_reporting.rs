@@ -37,7 +37,7 @@ fn rejected_action_does_not_enter_waiting_state() {
     assert!(!arbiter.propose(&proposal, &owners));
     let mut state = DecisionState::default();
     let arbitration = arbiter.finish(&owners);
-    record_committed(observation.round_no, &arbitration, &mut state);
+    record_committed(&observation, &arbitration, &mut state);
     assert!(state.pending_actions.is_empty());
     assert!(!state.individuals.contains_key(&WORKER_ID));
     assert!(!state.role_owners.contains_key(&WORKER_ID));
@@ -58,7 +58,7 @@ fn rejected_by_judger_action_reports_failure_to_parent_states() {
     );
     assert!(arbiter.propose(&proposal, &state.active_owners));
     let arbitration = arbiter.finish(&state.active_owners);
-    record_committed(observation.round_no, &arbitration, &mut state);
+    record_committed(&observation, &arbitration, &mut state);
     assert_eq!(
         state.individuals.get(&WORKER_ID),
         Some(&IndividualState::WaitingResult)
@@ -113,7 +113,7 @@ fn weapon_feedback_is_attributed_to_its_controller() {
     );
     assert!(arbiter.propose(&proposal, &state.active_owners));
     let arbitration = arbiter.finish(&state.active_owners);
-    record_committed(observation.round_no, &arbitration, &mut state);
+    record_committed(&observation, &arbitration, &mut state);
     observation.round_no += MIN_ACTION_ROUNDS;
     observation
         .last_round_role_action_results
@@ -212,5 +212,5 @@ fn commit_action(
     let mut arbiter = Arbiter::new(observation);
     assert!(arbiter.propose(&proposal, &state.active_owners));
     let arbitration = arbiter.finish(&state.active_owners);
-    record_committed(observation.round_no, &arbitration, state);
+    record_committed(observation, &arbitration, state);
 }

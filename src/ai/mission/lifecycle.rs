@@ -12,10 +12,19 @@ impl MissionRegistry {
         observation: &Observation,
         events: &[EventRecord],
     ) -> MissionReconciliation {
+        self.reconcile_progress(observation, events);
         let mut resolved = self.complete_satisfied(observation, events);
         resolved.extend(self.expire_due(observation.round_no));
         let ready = self.wake_ready();
         MissionReconciliation::new(resolved, ready)
+    }
+
+    fn reconcile_progress(&mut self, observation: &Observation, events: &[EventRecord]) {
+        for record in self.records.values_mut() {
+            if goal_can_complete(record.state) {
+                super::progress::reconcile(record, observation, events);
+            }
+        }
     }
 
     fn complete_satisfied(
@@ -27,16 +36,16 @@ impl MissionRegistry {
             .records
             .iter()
             .filter(|(_, record)| goal_can_complete(record.state))
-            .filter_map(|(mission, record)| {
-                match evaluate_goal(record.spec.goal(), observation, events) {
+            .filter_map(
+                |(mission, record)| match evaluate_record(record, observation, events) {
                     GoalEvaluation::Satisfied(evidence)
                         if completion_is_timely(record, &evidence) =>
                     {
                         Some((*mission, evidence))
                     }
                     _ => None,
-                }
-            })
+                },
+            )
             .collect();
         satisfied
             .into_iter()
@@ -103,6 +112,15 @@ impl MissionRegistry {
         self.remove_active(resolution.assignee(), mission);
         Some(resolution)
     }
+}
+
+fn evaluate_record(
+    record: &super::record::MissionRecord,
+    observation: &Observation,
+    events: &[EventRecord],
+) -> GoalEvaluation {
+    super::progress::evaluation(record)
+        .unwrap_or_else(|| evaluate_goal(record.spec.goal(), observation, events))
 }
 
 fn completion_is_timely(
