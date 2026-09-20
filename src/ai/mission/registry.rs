@@ -132,6 +132,23 @@ impl MissionRegistry {
         })
     }
 
+    pub(crate) fn stabilize_generated_spec(
+        &self,
+        assignee: i64,
+        candidate: MissionSpec,
+    ) -> MissionSpec {
+        let current = self
+            .active_by_assignee
+            .get(&assignee)
+            .and_then(|mission| self.records.get(mission));
+        current
+            .filter(|record| {
+                is_active(record.state) && record.spec.matches_except_deadline(&candidate)
+            })
+            .map(|record| record.spec.clone())
+            .unwrap_or(candidate)
+    }
+
     pub(crate) fn activate_for_action(
         &mut self,
         assignee: i64,

@@ -1,7 +1,7 @@
 # 状态、角色与决策算法实施规格
 
 > 更新：2026-09-21。状态：完整逐状态目标规格，仅部分算法已落地，尚未实战调优；已实现范围见 [HANDOFF.md](HANDOFF.md)。现有 FSM enum 不表示全部状态行为已完成。
-> [DESIGN.md](DESIGN.md) 管理架构与状态拓扑，[INTERFACES.md](INTERFACES.md) 管理类型和调用契约；本文定义每个状态具体调用的算法、守卫、角色规则及确定性选择顺序。未知裁判规则继续由 DESIGN 的 U02–U09 管理；U01 建造区域已确认。
+> [DESIGN.md](DESIGN.md) 管理架构与状态拓扑，[INTERFACES.md](INTERFACES.md) 管理类型和调用契约；本文定义每个状态具体调用的算法、守卫、角色规则及确定性选择顺序。未知裁判规则继续由 DESIGN 的 U02–U10 管理；U01 建造区域已确认。
 
 ## 1. 实施约定与命名参数
 
@@ -293,7 +293,7 @@ W1/W2 偏好只在任务等级、期限、效用和行程等指标相同后用�
 
 所有非终态适用 G01/G03 的取消传播；W.Degraded 冻结执行而非批量 Failed。任务死亡处理依可替代性决定，不把所有 UnitDied 一律映射 Failed。Assigned 的握手只用 INTERFACES 中的 MissionActivated，不新增同义事件。
 
-当前不可变 MissionSpec 已固定基础任务契约，`check_assignment` 已落实 BH05 的工种硬过滤和存活守卫。`MissionRegistry::reconcile` 已按 G05/G06 处理基础目标与期限，并按 A05/A10 保存 GatherAndSell 的提交基线：指定矿物增加形成采集 progress，只有同任务后续出售的物品减少与可归因正向金币差分同时出现才 Succeeded；预存库存、合法性 bool 或单独金币变化均不完成。实时策略仍只创建无依赖、无 deadline 任务；自动 DAG/期限生成、Failed/Suspended、租约、并发收支归因和其他进展字段仍须按本表补齐。
+当前不可变 MissionSpec 已固定基础任务契约，`check_assignment` 已落实 BH05 的工种硬过滤和存活守卫。实时任务已有 G06 deadline：经济/建设以当日最后提交回合为界，挑战再取 timeout 余量边界，防守以次日白昼效果为界；相对期限首次分配后冻结，过期提案在 owner 分配前拒绝。`MissionRegistry::reconcile` 已处理基础目标与期限，并按 A05/A10 保存 GatherAndSell 的提交基线：指定矿物增加形成采集 progress，只有同任务后续出售的物品减少与可归因正向金币差分同时出现才 Succeeded；预存库存、合法性 bool 或单独金币变化均不完成。实时策略仍只创建无依赖任务；自动 DAG、Failed/Suspended、租约、并发收支归因和其他进展字段仍须按本表补齐。
 
 ## 7. 战术 T 与个体 I：计划、动作和恢复
 

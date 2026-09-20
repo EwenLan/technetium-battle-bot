@@ -70,7 +70,7 @@ run.sh                     # 当前比赛服务入口：bash run.sh <port>
 | --- | --- | --- |
 | 服务/协议 | 有界 HTTP 请求、POST、类型化 JSON、重复键拒绝、同轮同负载字节缓存、完整空响应 | 官方路由/运行环境联调、结构化日志、完整事务与截止回滚 |
 | 世界/事件 | `ColdStart/Ready/Degraded` 生命周期、有效快照保留/恢复、稳定 ID 的有界事件日志、按层独立消费游标/确认/截断检测、实体差分、敌人记忆及两格任务点合并 | `Closed` 会话信号、三类知识和完整实体索引、预测/来源、事件信封过滤与报告路由 |
-| 战略/任务 | 昼夜/返防/终盘/紧急风险近似，基础采售、动态建造环内三炮建设、开拓者接题；MissionSpec、能力准入、基础目标/期限、经济跨步证据、依赖与终态传播 | 自动任务分解、自动期限生成、指令/预算、全队租约分配及其他 MissionRecord 进展字段 |
+| 战略/任务 | 昼夜/返防/终盘/紧急风险近似，基础采售、动态建造环内三炮建设、开拓者接题；MissionSpec、能力准入、规则窗口期限、基础目标/期限、经济跨步证据、依赖与终态传播 | 自动任务分解、指令/预算、全队租约分配及其他 MissionRecord 进展字段 |
 | 战术/个体 | 八向 A*、夜间炮位移动/基础攻击；每步 ActionProposal 获得新 intent，仲裁双重校验完整 owner，等待/Step 报告复用该路径 | 正式提案 ID/stamp/claims/效果、资源账本、联合火力、弹道、动作效果证据与完整七态个体 FSM |
 | 认知/扩展 | 单次题目 prompt 与下一回合答案提交、有限新闻原文记忆 | 作业代次/额度/沙盒/SOP、新闻解析、宝藏、回放 |
 
@@ -490,7 +490,9 @@ stateDiagram-v2
 
 每轮决策先对活动任务求值。`GoalEvidence` 保存观测实体或稳定事件 ID 及来源回合：建设检查指定格的存活己方建筑，挑战结束和守备窗口分别要求 `ChallengeEnded` 与进入白昼的 `PhaseChanged`，`AllOf` 要求全部子目标满足。GatherAndSell 在动作提交时保存物品/金币基线与下一效果回合；采集须看到该工人的指定矿物增加，出售须属于同一任务、看到该矿物按量减少及从基线开始的正向 GoldChanged，完成证据合并采集/出售事件。预存库存、单独金币变化或合法性 bool 均不能完成任务；并发支出遮蔽净增长时保守 Pending。Succeeded 保存去重证据并解锁依赖。EffectObservation/InternalPlanning 的证据必须落在 deadline 窗口内；ActionSubmission 只把匹配目标的 Sell/Build/SubmitAnswer/Attack 记作 checkpoint，按时提交后允许效果迟到。窗口已错过且无有效提交时根任务 Expired、依赖后代 Cancelled，对应 ActiveOwners 同步失效，迟到证据不复活终态。
 
-经济循环与挑战会话使用固定目标键，建设使用建造格，守备用武器 ID；只有完整 spec 相同的后续动作才复用 mission/plan 并创建新 intent，因而 deadline、priority 或策略改变也会建立新 assignment。提案先用当前观测角色检查 required capabilities：工人提供 Gather/Sell/Build/OperateWeapon，开拓者提供 SolveChallenge/OperateWeapon；缺失、死亡、生命未知或缺少任一能力均在创建 owner 前拒绝。攻击检查 controller，协议 actor 仍是武器。新任务获准后才取消旧任务及依赖后代，取消结果同时失效 ActiveOwners 父链。仲裁接收及编译响应时均调用 `ActiveOwners::is_current`，`PendingAction` 和下一帧 `ExecutionReport` 复用动作路径。当前自动策略仍未创建依赖/deadline；租约、其他任务 checkpoint/progress、MissionFactory、全队 AssignmentSolver 和 ResourceCoordinator 仍待实现。
+实时策略已生成四类期限：经济与建设必须在当日最后一回合前提交 Sell/Build；挑战必须在当日结束与 `首次候选回合 + timeoutRounds - ANSWER_MARGIN_ROUNDS` 的较早者前提交答案；防守须在下一白昼首回合观测到窗口结束。相对挑战期限在首次 assignment 固定，后续动作不能随当前回合向后滑动；同目标的其他契约字段变化仍会替换 assignment。已过期 spec 在 owner/intent 分配前拒绝。U10 记录 `timeoutRounds` 的正式起算点仍待确认，当前从首次候选准入开始计时，早于领取成功时刻，属于保守限制。
+
+经济循环与挑战会话使用固定目标键，建设使用建造格，守备用武器 ID；只有完整 spec 相同的后续动作才复用 mission/plan 并创建新 intent。自动相对期限一经分配会复用冻结值，显式 deadline、priority 或其他策略变化仍会建立新 assignment。提案先用当前观测角色检查 required capabilities：工人提供 Gather/Sell/Build/OperateWeapon，开拓者提供 SolveChallenge/OperateWeapon；缺失、死亡、生命未知或缺少任一能力均在创建 owner 前拒绝。攻击检查 controller，协议 actor 仍是武器。新任务获准后才取消旧任务及依赖后代，取消结果同时失效 ActiveOwners 父链。仲裁接收及编译响应时均调用 `ActiveOwners::is_current`，`PendingAction` 和下一帧 `ExecutionReport` 复用动作路径。当前自动策略仍未创建依赖；租约、其他任务 checkpoint/progress、MissionFactory、全队 AssignmentSolver 和 ResourceCoordinator 仍待实现。
 
 | status / reason 示例 | 产生时机与证据 | 父层需要做什么 |
 | --- | --- | --- |
@@ -746,5 +748,6 @@ stateDiagram-v2
 | U07 | 无 match ID、重置标志、认知请求 ID | 单进程会话、按回合/代次关联、过期结果隔离 | 确认半场是否重启、结果是否严格下一回合到达 |
 | U08 | 攻击时操控者是否还能另行动作未单独细化 | 按每角色单动作保守占槽 | 用武器 key 与 controllerId 的真实回执验证 |
 | U09 | 引用的《编译运行环境说明》未随当前 docs 提供 | 不承诺目标平台、可用系统包或编译器版本 | 开始交付前取得环境说明并锁定依赖/构建方式 |
+| U10 | `timeoutRounds` 给出任务超时回合数，但未明确从候选出现、发出 AcceptTask 还是领取成功后开始计算 | 挑选任务时先验证路径与求解余量；内部 deadline 从候选首次获准回合保守计时并冻结，不随重规划后移 | 用真实连续帧确认领取前后该字段是否递减及强制结束所在回合，再调整起算点 |
 
 局部不确定性只阻止依赖它的功能，不阻塞其他模块实现；进入比赛前必须解决影响基本建造、协议与启动的门槛问题。重大选择和变更理由记录在 [DECISION.md](DECISION.md)。

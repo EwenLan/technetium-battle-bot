@@ -3,7 +3,7 @@ use crate::ai::mission::economy::{pioneer_max_hp, should_heal};
 use crate::ai::tactics::next_step;
 use crate::ai::{DecisionError, DecisionState, propose_owned};
 use crate::command::Arbiter;
-use crate::domain::{Action, MissionSpec, Observation, PlayerTask, Role};
+use crate::domain::{Action, Observation, PlayerTask, Role};
 use crate::rules::constants::{
     ANSWER_MARGIN_ROUNDS, CHALLENGE_SETUP_ROUNDS, NO_COOLDOWN, NO_HEALTH,
 };
@@ -25,18 +25,12 @@ pub fn assign(
     if pioneer.health.unwrap_or(NO_HEALTH) <= NO_HEALTH {
         return Ok(());
     }
-    let action = choose_action(observation, pioneer, state);
-    if let Some(action) = action {
+    let planned = choose_action(observation, pioneer, state);
+    if let Some((action, timeout_rounds)) = planned {
         let submitted = matches!(action, Action::SubmitAnswer(_));
-        if propose_owned(
-            observation,
-            state,
-            arbiter,
-            pioneer.id,
-            action,
-            MissionSpec::challenge(),
-        )? && submitted
-        {
+        let spec = super::deadline::challenge_spec(observation, timeout_rounds);
+        let spec = state.stabilize_generated_spec(pioneer.id, spec);
+        if propose_owned(observation, state, arbiter, pioneer.id, action, spec)? && submitted {
             cognition::record_submission(observation, &mut state.challenge);
         }
     }
@@ -47,24 +41,31 @@ fn choose_action(
     observation: &Observation,
     pioneer: &Role,
     state: &DecisionState,
-) -> Option<Action> {
+) -> Option<(Action, Option<i32>)> {
     if should_heal(pioneer, pioneer_max_hp()) {
-        return Some(Action::Use {
+        let action = Action::Use {
             name: "Medicine".into(),
             pos: None,
-        });
+        };
+        return Some((action, None));
     }
     if !observation.phase_task.is_empty() {
-        return cognition::answer_action(observation, &state.challenge);
+        return cognition::answer_action(observation, &state.challenge)
+            .map(|action| (action, None));
     }
     let view = WorldView::new(observation);
     let task = choose_task(observation, pioneer, &view)?;
+    let action = approach_task(pioneer, task, &view)?;
+    Some((action, task.timeout_rounds))
+}
+
+fn approach_task(pioneer: &Role, task: &PlayerTask, view: &WorldView<'_>) -> Option<Action> {
     if view.adjacent_task(pioneer.pos, task.task_position) {
         return Some(Action::AcceptTask);
     }
     let stands = view.task_stands(task.task_position, pioneer.id);
     Some(Action::Move(
-        next_step(&view, pioneer.id, pioneer.pos, &stands)?.next,
+        next_step(view, pioneer.id, pioneer.pos, &stands)?.next,
     ))
 }
 

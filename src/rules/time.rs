@@ -30,6 +30,15 @@ pub fn next_night(round: i32) -> Option<i32> {
     round.checked_add(delta)
 }
 
+pub fn next_day(round: i32) -> Option<i32> {
+    let current = phase(round)?;
+    let night = next_night(round)?;
+    match current {
+        Phase::Day => night.checked_add(NIGHT_ROUNDS),
+        Phase::Night => night.checked_sub(DAY_ROUNDS),
+    }
+}
+
 pub fn day_number(round: i32) -> Option<i32> {
     if !(FIRST_ROUND..=MATCH_ROUNDS).contains(&round) {
         return None;

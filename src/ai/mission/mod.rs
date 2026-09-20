@@ -1,5 +1,6 @@
 mod capability;
 mod construction;
+mod deadline;
 mod economy;
 mod goal;
 mod lifecycle;
@@ -9,10 +10,13 @@ mod record;
 mod registry;
 
 #[cfg(test)]
+mod deadline_tests;
+#[cfg(test)]
 mod progress_tests;
 
 pub use capability::{CapabilityRejection, check_assignment, role_capabilities};
 pub use construction::BuildPlan;
+pub(crate) use deadline::defense_spec;
 pub use goal::{GoalEvaluation, GoalEvidence, evaluate_goal};
 pub use record::{
     MissionCancellation, MissionCompletion, MissionReconciliation, MissionResolution, MissionView,
@@ -104,9 +108,13 @@ fn worker_selection(
 ) -> Option<(MissionSpec, Action)> {
     if let Some(action) = construction::worker_action(observation, worker, state) {
         let plan = state.build_plans.get(&worker.id)?;
-        return Some((MissionSpec::construction(plan.site, plan.kind), action));
+        let spec = deadline::construction_spec(observation, plan.site, plan.kind);
+        return Some((state.stabilize_generated_spec(worker.id, spec), action));
     }
-    economy::worker_action(observation, worker).map(|action| (MissionSpec::economy(), action))
+    economy::worker_action(observation, worker).map(|action| {
+        let spec = deadline::economy_spec(observation);
+        (state.stabilize_generated_spec(worker.id, spec), action)
+    })
 }
 
 fn state_for_action(action: &Action) -> (TacticalState, IndividualState) {

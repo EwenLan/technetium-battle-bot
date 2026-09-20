@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 
 use crate::ai::{DecisionError, DecisionState, propose_owned};
 use crate::command::Arbiter;
-use crate::domain::{Action, MissionSpec, Observation, Pos, Role};
+use crate::domain::{Action, Observation, Pos, Role};
 use crate::rules::constants::{
     DEFAULT_LEVEL, MAX_FIRE_TARGETS, NEIGHBOR_RANGE, NO_COOLDOWN, NO_HEALTH,
 };
@@ -45,14 +45,9 @@ pub fn defend(
             } else {
                 controller.id
             };
-            propose_owned(
-                observation,
-                state,
-                arbiter,
-                actor,
-                action,
-                MissionSpec::defense(weapon.id),
-            )?;
+            let spec = crate::ai::mission::defense_spec(observation, weapon.id);
+            let spec = state.stabilize_generated_spec(controller.id, spec);
+            propose_owned(observation, state, arbiter, actor, action, spec)?;
         }
     }
     Ok(())

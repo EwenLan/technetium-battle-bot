@@ -97,6 +97,15 @@ impl DecisionState {
         self.mission_registry.view(mission)
     }
 
+    pub(crate) fn stabilize_generated_spec(
+        &self,
+        assignee: i64,
+        candidate: MissionSpec,
+    ) -> MissionSpec {
+        self.mission_registry
+            .stabilize_generated_spec(assignee, candidate)
+    }
+
     pub(crate) fn reconcile_missions(&mut self, observation: &Observation, events: &[EventRecord]) {
         let reconciliation = self.mission_registry.reconcile(observation, events);
         for resolution in reconciliation.resolved() {
@@ -261,6 +270,12 @@ pub(crate) fn propose_owned(
 ) -> Result<bool, DecisionError> {
     let reporter = action_reporter(actor, &action);
     if mission::check_assignment(observation, reporter, &spec).is_err() {
+        return Ok(false);
+    }
+    if spec
+        .deadline()
+        .is_some_and(|deadline| deadline.is_expired(observation.round_no))
+    {
         return Ok(false);
     }
     let prepared = state.prepare_action(actor, action, spec)?;

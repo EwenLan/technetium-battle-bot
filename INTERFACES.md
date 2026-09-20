@@ -5,7 +5,7 @@
 
 ## 1. 接口边界与实现方式
 
-当前源码入口为 `transport::serve(port)` → `runtime::Session::handle(&[u8]) -> Vec<u8>` → `protocol::decode/encode`、`world::World::apply`、`ai::decide`、`command::Arbiter::propose/finish`。`Session` 先持久化观测和上一轮合法性回执，再克隆 `DecisionState` 草稿；新动作、任务记录、owner 分配和战略事件游标仅在决策成功、编码及截止检查通过后提交，并缓存同回合同请求结果。`MissionRegistry` 持久保存 MissionRecord，依赖只从不可变 MissionSpec 读取；spec 已包含目标谓词、能力、deadline、优先级、可中断性和重试策略。完整 spec 相同才复用 mission/plan，每步新建 intent；决策开始时求值 goal/deadline，经济任务额外用提交时的物品/金币基线对账连续采集和出售效果。任务提案在 owner 分配前按当前存活角色检查全部 required capabilities，攻击使用 controller 的能力。简化 `ActionProposal { actor, owner, action }` 进入仲裁后经过两次完整链校验，等待和 Step 报告复用获准路径。仍无正式 `TurnStamp`、ResourceCoordinator、层级输出/报告队列或 IF16 回放；自动策略尚未产生任务依赖/deadline。合法回执仍不等于效果确认。现有 `WorldView` 是观测的只读查询封装，不等同于本文完整 WorldSnapshot。
+当前源码入口为 `transport::serve(port)` → `runtime::Session::handle(&[u8]) -> Vec<u8>` → `protocol::decode/encode`、`world::World::apply`、`ai::decide`、`command::Arbiter::propose/finish`。`Session` 先持久化观测和上一轮合法性回执，再克隆 `DecisionState` 草稿；新动作、任务记录、owner 分配和战略事件游标仅在决策成功、编码及截止检查通过后提交，并缓存同回合同请求结果。`MissionRegistry` 持久保存 MissionRecord，依赖只从不可变 MissionSpec 读取；spec 已包含目标谓词、能力、deadline、优先级、可中断性和重试策略。完整 spec 相同才复用 mission/plan，每步新建 intent；决策开始时求值 goal/deadline，经济任务额外用提交时的物品/金币基线对账连续采集和出售效果。实时策略为经济、建设、挑战及防守附加规则窗口 deadline，并冻结活动任务的自动相对期限。任务提案在 owner 分配前检查 deadline 与当前角色的全部 required capabilities，攻击使用 controller 的能力。简化 `ActionProposal { actor, owner, action }` 进入仲裁后经过两次完整链校验，等待和 Step 报告复用获准路径。仍无正式 `TurnStamp`、ResourceCoordinator、层级输出/报告队列或 IF16 回放；自动策略尚未产生任务依赖。合法回执仍不等于效果确认。现有 `WorldView` 是观测的只读查询封装，不等同于本文完整 WorldSnapshot。
 
 本阶段 `WorldView::task_cells/task_stands/adjacent_task` 将同一任务点的多格 `zones` 合并为交互候选；目前仍采用相邻格交互的保守假设，正式站位语义待 U03 联调。
 
@@ -13,7 +13,7 @@
 | --- | --- |
 | IF01–IF03 | JSON/HTTP、重复键/地图实体与 footprint 边界校验、简化回合缓存与草稿提交；未完成正式事务代次、官方路由验证和结构化日志 |
 | IF04–IF05 | 世界就绪/降级/恢复、有效快照保留、基础差分/记忆、几何/动态建造环、局部动作校验；无完整预测和规则服务 |
-| IF06–IF09 | 直接函数调用、完整基础 MissionSpec、角色能力准入、私有 MissionRegistry/只读 MissionView、依赖传播、基础 goal/deadline 与经济 progress 对账、每步新 intent；未实现自动任务分解/期限生成、其他进展字段、层级消息和正式提案元数据 |
+| IF06–IF09 | 直接函数调用、完整基础 MissionSpec、角色能力/期限准入、规则窗口 deadline、私有 MissionRegistry/只读 MissionView、依赖传播、基础 goal/deadline 与经济 progress 对账、每步新 intent；未实现自动任务分解、其他进展字段、层级消息和正式提案元数据 |
 | IF10–IF11 | 事件/状态 enum、稳定 ID 的有界事件日志、四个层级读者的独立 cursor/poll/ack、截断和陈旧 receipt 检测、带 intent scope 的有限 Step 报告及旧 owner 隔离；无信封过滤/完整路由或通用 FSM 驱动 |
 | IF12–IF14 | 本轮内角色、目标格、金币的基础预约与响应编码；其余资源/动作及回执未覆盖 |
 | IF15–IF16 | 单次 LLM prompt/下一回合答案；无完整作业、沙盒、SOP、遥测/回放 |
@@ -300,7 +300,7 @@ runtime 在 propose 与 apply_grants 之间调用 IF12；同轮同阶段的这�
 
 DESIGN 中的 Mission 概念在实现中由不可变 MissionSpec 和任务层私有 MissionRecord 表达，不再另建一份可被各层随意修改的公共 Mission 结构。
 
-当前源码的不可变 `MissionSpec` 已实现完整基础调度契约；`check_assignment` 在 owner/intent 分配前验证角色能力。MissionRecord 保存状态、完成证据、目标动作提交回合与 EconomyProgress，MissionView 只读暴露 progress_evidence。`record_action_commit` 接收提交时 Observation：Collect checkpoint 保存矿种和个人数量，Sell checkpoint 保存矿种、预计剩余量和共享金币基线。`reconcile` 只接受下一连续观测回合中对应角色的 InventoryChanged、物品数量方向和匹配基线的正向 GoldChanged；采集证据存在后才能把出售证据组成 EconomyCycleCompleted。基础目标、期限和依赖终态在同一草稿中对账。自动期限生成、租约、共享收支的并发归因和其余任务进展字段仍待实现。
+当前源码的不可变 `MissionSpec` 已实现完整基础调度契约；`check_assignment` 在 owner/intent 分配前验证角色能力，`propose_owned` 同时拒绝当前回合已过期的契约。deadline 生成器为经济/建设设置当日 ActionSubmission 边界，为挑战叠加 timeout 与答案余量，为防守设置下一白昼的 EffectObservation 边界；活动 assignment 仅在 deadline 之外的契约字段一致时复用首次生成值，避免相对期限逐帧后移。MissionRecord 保存状态、完成证据、目标动作提交回合与 EconomyProgress，MissionView 只读暴露 progress_evidence。`record_action_commit` 接收提交时 Observation：Collect checkpoint 保存矿种和个人数量，Sell checkpoint 保存矿种、预计剩余量和共享金币基线。`reconcile` 只接受下一连续观测回合中对应角色的 InventoryChanged、物品数量方向和匹配基线的正向 GoldChanged；采集证据存在后才能把出售证据组成 EconomyCycleCompleted。基础目标、期限和依赖终态在同一草稿中对账。自动任务分解、租约、共享收支的并发归因和其余任务进展字段仍待实现。
 
 ### 7.4 IF08：战术 → 个体，以及局部规划服务
 

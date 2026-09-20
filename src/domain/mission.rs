@@ -234,6 +234,17 @@ impl MissionSpec {
         self.retry_policy
     }
 
+    pub(crate) fn matches_except_deadline(&self, other: &Self) -> bool {
+        self.kind == other.kind
+            && self.objective == other.objective
+            && self.goal == other.goal
+            && self.dependencies == other.dependencies
+            && self.required_capabilities == other.required_capabilities
+            && self.priority == other.priority
+            && self.interruptibility == other.interruptibility
+            && self.retry_policy == other.retry_policy
+    }
+
     fn new(
         kind: MissionKind,
         objective: ObjectiveKey,

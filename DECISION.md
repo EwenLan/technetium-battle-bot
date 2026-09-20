@@ -60,7 +60,7 @@ FSM 管理跨回合阶段，效用评分在状态允许的策略中做选择。�
 
 **状态：采纳；具体缺失规则暂定。** 正式文字作为规则依据，当前请求作为状态依据；示例和 Demo 用于兼容测试与线索。动态价格/射程使用观测，缺失信息保留未知状态。
 
-建造区域原先在未知时采用保守禁用，现已由 D24 的确认规则替代；其他未知规则仍不从 Demo 猜补。Demo 的回合 1 起始作为暂定设置，但不是规范证据。代价是资料缺失时功能可能不完整；通过 DESIGN U02–U09 管理验证门槛。
+建造区域原先在未知时采用保守禁用，现已由 D24 的确认规则替代；其他未知规则仍不从 Demo 猜补。Demo 的回合 1 起始作为暂定设置，但不是规范证据。代价是资料缺失时功能可能不完整；通过 DESIGN U02–U10 管理验证门槛。
 
 ## D11：有界单回合事务、幂等与降级
 
@@ -205,6 +205,12 @@ EffectObservation 与 InternalPlanning 要求完成证据落在 deadline 窗口�
 **状态：采纳，补全 D33 的 `EconomyCycleCompleted` checkpoint。** 任务记录在实际提交 Collect 时保存物品种类、执行角色的提交前数量和预计效果回合；下一帧必须同时出现该物品数量增加与同角色 `InventoryChanged` 事件，才记录本任务的采集证据。实际提交 Sell 时保存出售后预期余量和提交前团队金币；只有任务已有采集证据，且下一帧同时出现指定物品减少、同角色背包事件，以及从保存基线开始的正向 `GoldChanged`，才完成经济循环。
 
 单次合法回执、任务开始前已有库存或无归属的金币变化均不足以完成目标。checkpoint 与证据由私有 MissionRecord 持有，MissionView 只公开稳定证据副本。共享金币缺少交易流水时，并发消费可能抵消出售收入；当前宁可保持 Pending，也不虚构收益归属。后续 ResourceCoordinator 或动作效果账本可在不改变完成语义的前提下分解净变化。
+
+## D36：自动期限在首次 assignment 冻结
+
+**状态：采纳，落实 D32/D33 的实时期限生成。** 经济与建设任务使用当日最后回合作为 inclusive ActionSubmission deadline；挑战取该边界与 `首次候选回合 + timeoutRounds - ANSWER_MARGIN_ROUNDS` 的较早者；整夜防守使用下一白昼首回合的 inclusive EffectObservation deadline。这样及时提交的 Sell、Build 或 SubmitAnswer 可以等待后续效果，而未提交的工作会在窗口结束后 Expired。
+
+相对 deadline 只在自动任务首次分配时计算。同 assignee 的活动任务若除 deadline 外契约完全相同，后续步骤复用已冻结的完整 spec；显式调用方改变 deadline 仍按 D32 建立新 assignment。当前回合已过期的提案在 owner 分配前拒绝，不消耗 ID 或替换现有工作。`timeoutRounds` 的裁判起算点属 U10；当前从候选首次准入保守计时，代价是可能提前放弃，收益是不让期限随重规划无限后移。
 
 ## 变更规则
 
