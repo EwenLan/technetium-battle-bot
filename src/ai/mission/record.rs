@@ -5,6 +5,40 @@ use super::GoalEvidence;
 use super::progress::EconomyProgress;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum MissionFailureReason {
+    RetryExhausted,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct MissionFailure {
+    reason: MissionFailureReason,
+    observed_round: i32,
+    attempts: u8,
+}
+
+impl MissionFailure {
+    pub(super) const fn retry_exhausted(observed_round: i32, attempts: u8) -> Self {
+        Self {
+            reason: MissionFailureReason::RetryExhausted,
+            observed_round,
+            attempts,
+        }
+    }
+
+    pub const fn reason(self) -> MissionFailureReason {
+        self.reason
+    }
+
+    pub const fn observed_round(self) -> i32 {
+        self.observed_round
+    }
+
+    pub const fn attempts(self) -> u8 {
+        self.attempts
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct MissionCancellation {
     pub(super) assignee: i64,
     pub(super) owner: OwnerPath,
@@ -45,6 +79,8 @@ pub struct MissionView {
     completion_evidence: Vec<GoalEvidence>,
     goal_submission_round: Option<i32>,
     progress_evidence: Vec<GoalEvidence>,
+    retry_count: u8,
+    failure: Option<MissionFailure>,
 }
 
 impl MissionView {
@@ -76,6 +112,14 @@ impl MissionView {
         &self.progress_evidence
     }
 
+    pub const fn retry_count(&self) -> u8 {
+        self.retry_count
+    }
+
+    pub const fn failure(&self) -> Option<MissionFailure> {
+        self.failure
+    }
+
     pub fn dependencies(&self) -> &std::collections::BTreeSet<MissionId> {
         self.spec.dependencies()
     }
@@ -90,6 +134,8 @@ pub(super) struct MissionRecord {
     pub(super) completion_evidence: Vec<GoalEvidence>,
     pub(super) goal_submission_round: Option<i32>,
     pub(super) economy_progress: EconomyProgress,
+    pub(super) retry_count: u8,
+    pub(super) failure: Option<MissionFailure>,
 }
 
 impl MissionRecord {
@@ -102,6 +148,8 @@ impl MissionRecord {
             completion_evidence: self.completion_evidence.clone(),
             goal_submission_round: self.goal_submission_round,
             progress_evidence: self.economy_progress.evidence().to_vec(),
+            retry_count: self.retry_count,
+            failure: self.failure,
         }
     }
 }

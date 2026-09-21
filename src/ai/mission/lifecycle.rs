@@ -12,11 +12,20 @@ impl MissionRegistry {
         observation: &Observation,
         events: &[EventRecord],
     ) -> MissionReconciliation {
+        self.reset_retries(events);
         self.reconcile_progress(observation, events);
         let mut resolved = self.complete_satisfied(observation, events);
         resolved.extend(self.expire_due(observation.round_no));
         let ready = self.wake_ready();
         MissionReconciliation::new(resolved, ready)
+    }
+
+    fn reset_retries(&mut self, events: &[EventRecord]) {
+        for record in self.records.values_mut() {
+            if super::registry::is_blockable(record.state) && retry_progress(record, events) {
+                record.retry_count = crate::rules::constants::ZERO_COUNTER;
+            }
+        }
     }
 
     fn reconcile_progress(&mut self, observation: &Observation, events: &[EventRecord]) {
@@ -160,4 +169,15 @@ fn goal_can_complete(state: MissionState) -> bool {
             | MissionState::Blocked
             | MissionState::Suspended
     )
+}
+
+fn retry_progress(record: &super::record::MissionRecord, events: &[EventRecord]) -> bool {
+    events.iter().any(|event| match &event.event {
+        crate::event::WorldEvent::UnitMoved { id, .. }
+        | crate::event::WorldEvent::InventoryChanged(id) => *id == record.assignee,
+        crate::event::WorldEvent::ChallengeStarted => {
+            record.spec.kind() == crate::domain::MissionKind::Challenge
+        }
+        _ => false,
+    })
 }

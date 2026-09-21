@@ -47,6 +47,8 @@ impl MissionRegistry {
                 completion_evidence: Vec::new(),
                 goal_submission_round: None,
                 economy_progress: super::progress::EconomyProgress::default(),
+                retry_count: crate::rules::constants::ZERO_COUNTER,
+                failure: None,
             },
         );
         Ok(mission)
@@ -390,7 +392,7 @@ fn is_active(state: MissionState) -> bool {
     )
 }
 
-fn is_blockable(state: MissionState) -> bool {
+pub(super) fn is_blockable(state: MissionState) -> bool {
     matches!(
         state,
         MissionState::Assigned | MissionState::Executing | MissionState::Blocked

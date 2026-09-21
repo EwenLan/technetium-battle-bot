@@ -212,6 +212,12 @@ EffectObservation 与 InternalPlanning 要求完成证据落在 deadline 窗口�
 
 相对 deadline 只在自动任务首次分配时计算。同 assignee 的活动任务若除 deadline 外契约完全相同，后续步骤复用已冻结的完整 spec；显式调用方改变 deadline 仍按 D32 建立新 assignment。当前回合已过期的提案在 owner 分配前拒绝，不消耗 ID 或替换现有工作。`timeoutRounds` 的裁判起算点属 U10；当前从候选首次准入保守计时，代价是可能提前放弃，收益是不让期限随重规划无限后移。
 
+## D37：明确拒绝按完整任务契约有限重规划
+
+**状态：采纳，落实 RetryPolicy 与 G07。** 只有归属当前 owner 的明确 `ActionRejected` 增加任务 retry_count；未到 `max_replans` 时 Mission 进入 Blocked、Tactics 进入 Replan。达到上限时根任务记录 `RetryExhausted`、失败回合和尝试次数并进入 Failed，依赖后代按稳定顺序 Cancelled，调用方在同一决策草稿中失效全部相关 owner。合法性 bool 不证明进展；观测到归属角色的 `UnitMoved`、`InventoryChanged` 或匹配挑战的 `ChallengeStarted` 才清零计数。未知回执只 Blocked，不消耗明确拒绝预算。
+
+失败记录保留完整 MissionSpec 作为墓碑。同一 assignee 的精确失败契约在 owner 分配前被抑制，防止策略下一回合自动创建同一个注定失败的任务；priority、deadline、RetryPolicy 或新规则窗口改变后可创建新实例。代价是当前移动/背包事件只证明发生了局部进展，不证明目标已完成；迟到未知动作的消费墓碑及更多类型化失败原因仍待后续实现。
+
 ## 变更规则
 
 为新决策分配递增 D 编号，保留旧决策并标记“被 Dxx 替代”，说明触发证据、兼容影响和验证结果；不要抹去仍影响现有实现的假设。规则缺口获得证据后同时更新 DESIGN 的 U 条目及 PLAN 的验收状态。

@@ -106,6 +106,10 @@ impl DecisionState {
             .stabilize_generated_spec(assignee, candidate)
     }
 
+    fn mission_proposal_allowed(&self, assignee: i64, spec: &MissionSpec) -> bool {
+        self.mission_registry.proposal_allowed(assignee, spec)
+    }
+
     pub(crate) fn reconcile_missions(&mut self, observation: &Observation, events: &[EventRecord]) {
         let reconciliation = self.mission_registry.reconcile(observation, events);
         for resolution in reconciliation.resolved() {
@@ -237,6 +241,15 @@ impl DecisionState {
         self.mission_registry.mark_blocked(owner);
     }
 
+    pub(crate) fn reject_mission_action(&mut self, owner: &OwnerPath, round: i32) -> bool {
+        let resolutions = self.mission_registry.record_action_rejection(owner, round);
+        let failed = !resolutions.is_empty();
+        for resolution in resolutions {
+            self.apply_resolution(resolution);
+        }
+        failed
+    }
+
     pub(crate) fn record_mission_action(
         &mut self,
         owner: &OwnerPath,
@@ -276,6 +289,9 @@ pub(crate) fn propose_owned(
         .deadline()
         .is_some_and(|deadline| deadline.is_expired(observation.round_no))
     {
+        return Ok(false);
+    }
+    if !state.mission_proposal_allowed(reporter, &spec) {
         return Ok(false);
     }
     let prepared = state.prepare_action(actor, action, spec)?;

@@ -24,7 +24,9 @@ GatherAndSell 已有跨步 checkpoint。实际提交 collect 时保存目标矿�
 
 实时经济和建设任务使用当日最后回合作为 ActionSubmission deadline；挑战取该边界与 `首次候选回合 + timeoutRounds - ANSWER_MARGIN_ROUNDS` 的较早者；防守使用下一白昼首回合的 EffectObservation deadline。自动相对期限在首次 assignment 冻结，后续步骤复用，已过期 spec 在 owner 分配前拒绝。U10 的挑战 timeout 正式起算点尚未确认，当前从候选首次准入开始计时，可能比裁判更保守。
 
-当前自动策略创建的任务仍不带依赖；MissionSpec 尚无资源租约，其他任务也没有完整 progress/lease。挑战的固定目标尚未区分具体挑战代次。简化 `ActionProposal` 只有 actor、owner、action，未包含正式契约的 ProposalId、TurnStamp、claims、预期效果和原子组。战略已有阶段选择，个体已有提交动作的简化等待/回执处理；其余 enum 不代表完成的状态机。仲裁目前允许 `move/collect/sell/build/attack/acceptTask/submitAnswer/use Medicine` 的受限子集。夜间火力是基础贪心，无穿透/溅射结算模型和联合配对。
+明确 `ActionRejected` 会增加该任务的 RetryPolicy 计数：未到上限时 Mission 进入 Blocked、Tactics 进入 Replan；达到上限时根任务进入 Failed、依赖后代进入 Cancelled，并在同一草稿中失效 owner。MissionView 暴露只读 retry_count 和 RetryExhausted 失败记录。相同 assignee 的完整失败 MissionSpec 会被墓碑阻止重建；新规则窗口或 priority/deadline 等契约变化仍可创建新任务。只有实际 `UnitMoved`、`InventoryChanged` 或匹配挑战的 `ChallengeStarted` 才清零计数，合法性 bool 不算进展。未知回执只进入 Blocked，不增加拒绝计数；迟到未知动作的消费墓碑仍待实现。
+
+当前自动策略创建的任务仍不带依赖；MissionSpec 尚无资源租约，建设/防守等任务也没有完整 progress/lease。挑战的固定目标尚未区分具体挑战代次。简化 `ActionProposal` 只有 actor、owner、action，未包含正式契约的 ProposalId、TurnStamp、claims、预期效果和原子组。战略已有阶段选择，个体已有提交动作的简化等待/回执处理；其余 enum 不代表完成的状态机。仲裁目前允许 `move/collect/sell/build/attack/acceptTask/submitAnswer/use Medicine` 的受限子集。夜间火力是基础贪心，无穿透/溅射结算模型和联合配对。
 
 认知仅覆盖单次 prompt/紧邻下一回合结果，尚无每日额度、作业代次、迟到结果墓碑、沙盒、SOP；新闻、宝藏、墙体、采购/升级/拆除与完整回放尚未实现。不能宣称适合正式比赛或达到目标性能。协议空响应、构建目标与启动方式还需官方环境验证。
 
@@ -41,7 +43,7 @@ bash run.sh 45731
 curl --noproxy '*' -sS -X POST --data-binary @tests/fixtures/day.json http://127.0.0.1:45731/
 ```
 
-最新阶段已通过 rustfmt、Clippy warnings-as-errors、84 个 Rust 测试（17 个单元测试、67 个集成测试）、locked release 构建和本机 HTTP 200 JSON 冒烟。任务验证覆盖自动 deadline 窗口及冻结、显式期限替换、过期准入拒绝、经济跨步进展与错误归因反例、角色能力准入、目标证据、依赖传播、草稿回滚及旧回执隔离；该结果不代表完整 P2 或官方判题器联调完成。
+最新阶段已通过 rustfmt、Clippy warnings-as-errors、88 个 Rust 测试（21 个单元测试、67 个集成测试）、locked release 构建和本机 HTTP 200 JSON 冒烟。任务验证覆盖 RetryPolicy 耗尽、进展清零、失败契约抑制、失败依赖传播、自动 deadline 窗口及冻结、经济跨步进展与错误归因反例、角色能力准入、目标证据、草稿回滚及旧回执隔离；该结果不代表完整 P2 或官方判题器联调完成。
 
 继续按 PLAN 补齐 P0 的其余正式规则与运行环境证据，再完成 P1 的正式事务/异常服务测试、P2 的世界/FSM/事件上报、P3 的动作与经济闭环、P4 防守、P5 认知、P6 新闻宝藏、P7 全场回放。建造区域 U01 已解决；围墙布局仍须先验证基地出口与操炮通路。每次代码变更按 [AGENTS.md](AGENTS.md) 限制拆分、测试、同步文档并及时提交推送。
 

@@ -117,7 +117,26 @@ fn update_states(state: &mut DecisionState, report: &ExecutionReport) {
             .insert(report.reporter, IndividualState::Idle);
         return;
     }
+    if report.reason == ReportReason::ActionRejected {
+        update_rejected_states(state, report);
+        return;
+    }
     update_recovery_states(state, report);
+}
+
+fn update_rejected_states(state: &mut DecisionState, report: &ExecutionReport) {
+    let reporter = report.reporter;
+    if state.reject_mission_action(&report.owner, report.observed_round) {
+        state.individuals.insert(reporter, IndividualState::Idle);
+        state.missions.insert(reporter, MissionState::Failed);
+        state.tactics.insert(reporter, TacticalState::Failed);
+        return;
+    }
+    state
+        .individuals
+        .insert(reporter, IndividualState::Recovering);
+    state.missions.insert(reporter, MissionState::Blocked);
+    state.tactics.insert(reporter, TacticalState::Replan);
 }
 
 fn update_dead_states(state: &mut DecisionState, report: &ExecutionReport) {

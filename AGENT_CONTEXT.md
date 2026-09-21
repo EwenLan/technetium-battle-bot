@@ -52,7 +52,7 @@ LLM 服务于新闻推理、宝藏线索和自进化任务，通过比赛的 `pr
 
 细化版设计已补充世界生命周期、各层状态行为/转移矩阵、10 类任务流程、类型化事件/上报目录，以及挑战、认知作业、新闻和宝藏子状态机。共用约束包括分阶段有限推进、保存未消费证据、报告作用域、取消代次和终止作业墓碑；动作提出、提交和效果确认分开处理。
 
-目标接口基线为 IF01–IF16，统一 TurnStamp/OwnerPath、任务规范与私有记录、意图/建议/已提交动作、类型化事件、资源租约与认知作业。当前已实现 OwnerPath/ActiveOwners 的完整父链代际校验与失效墓碑、完整基础 MissionSpec、角色能力与期限准入、实时规则窗口 deadline、持久 MissionRegistry、建设/挑战结束/守备窗口目标证据、经济任务跨步采售证据、三类期限守卫、依赖与终态传播、逐步 intent、带 owner 的 ActionProposal、响应编译前复验、等待/Step 报告 owner 贯通，以及简化事件日志的按层 cursor/poll/ack；只有战略读者接入 Session 草稿。ResourceCoordinator、自动任务分解、其他任务进展字段、正式提案元数据、共享 decision 模块、正式信封/报告路由与预测仓尚未实现。
+目标接口基线为 IF01–IF16，统一 TurnStamp/OwnerPath、任务规范与私有记录、意图/建议/已提交动作、类型化事件、资源租约与认知作业。当前已实现 OwnerPath/ActiveOwners 的完整父链代际校验与失效墓碑、完整基础 MissionSpec、角色能力与期限准入、实时规则窗口 deadline、持久 MissionRegistry、建设/挑战结束/守备窗口目标证据、经济任务跨步采售证据、三类期限守卫、依赖与终态传播、明确拒绝的有限重规划、RetryExhausted 失败传播与完整契约墓碑、逐步 intent、带 owner 的 ActionProposal、响应编译前复验、等待/Step 报告 owner 贯通，以及简化事件日志的按层 cursor/poll/ack；只有战略读者接入 Session 草稿。ResourceCoordinator、自动任务分解、其他任务进展字段、正式提案元数据、共享 decision 模块、正式信封/报告路由与预测仓尚未实现。
 
 ## 4. 重要事实与待确认项
 
@@ -208,6 +208,13 @@ U01 已解决：用户确认基地 2×2，武器环为周围 4×4 减基地，�
 - 自动相对期限在首次 assignment 冻结；后续相同契约步骤复用原绝对回合，显式修改期限仍按完整 MissionSpec 替换任务。已过期契约在能力检查后、owner 分配前拒绝。
 - 新增 U10：接口没有明确 `timeoutRounds` 起算点；当前从候选首次准入保守计时，正式连续帧确认后再调整。
 - 新增四类窗口、跨回合冻结、显式期限替换和过期准入回归测试；已通过 rustfmt、Clippy warnings-as-errors、84 个 Rust 测试（17 个单元、67 个集成）、locked release 构建、本机 HTTP 200 JSON 冒烟，以及文件/函数长度、分支循环和数字字面量审计。
+
+### 2026-09-21：任务拒绝有限重规划与失败墓碑
+
+- 明确 ActionRejected 按 MissionSpec.retry_policy 累计；未到上限时进入 Blocked/Replan，到达上限时根任务记录 RetryExhausted 并 Failed，依赖后代 Cancelled，相关 owner 同步失效。未知回执保持 Blocked 且不消耗明确拒绝预算。
+- `UnitMoved`、`InventoryChanged` 和匹配任务的 `ChallengeStarted` 作为真实局部进展清零计数；动作合法性 bool 不清零。MissionView 提供只读 retry_count、失败原因、失败回合和尝试次数。
+- 同一 assignee 的完整失败 MissionSpec 在 owner 分配前被墓碑抑制；priority、deadline、RetryPolicy 或规则窗口改变仍能建立新任务。重试和失败传播拆入独立 `mission/retry.rs`，保持 registry 文件低于 500 行。
+- 新增重试耗尽、进展清零、失败契约抑制与依赖失败传播回归测试；已通过 rustfmt、Clippy warnings-as-errors、88 个 Rust 测试（21 个单元、67 个集成）、locked release 构建、本机 HTTP 200 JSON 冒烟，以及文件/函数长度、分支循环和数字字面量审计。
 
 ## 6. 后续记录规范
 

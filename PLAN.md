@@ -36,6 +36,7 @@
 - [x] 从当前存活角色类型生成任务能力集，并在 owner 分配前按 MissionSpec.required_capabilities 统一过滤；缺人、死亡、生命未知和缺少具体能力均返回类型化拒绝。
 - [x] 为 GatherAndSell 保存动作基线和跨步 progress：采集须观察目标矿物增加，出售须在本任务采集证据后观察同物品减少及可归因金币增加，满足后写入完成证据。
 - [x] 为实时经济、建设、挑战和守备任务生成规则窗口 deadline；相对挑战期限在首次 assignment 冻结，过期契约在 owner 分配前拒绝。
+- [x] 将明确动作拒绝计入 RetryPolicy；到达上限后根任务 Failed、依赖后代 Cancelled，真实移动/背包/挑战进展清零计数，并以完整失败契约墓碑阻止同窗口自动重建。
 - [x] 连续帧验证 `DayDevelop → PrepareNight → NightDefend → DayDevelop`，并覆盖紧急态退出滞回。
 - [x] 协议校验覆盖我方/敌方/机器人、任务点和基地完整 2×2 footprint，越界帧不进入世界模型。
 - [ ] 完成正式四层/世界 FSM、事件上报闭环、全部 12 类动作、认知作业与新闻/宝藏算法。
@@ -76,7 +77,7 @@
 - [ ] 建立观测事实、历史记忆、预测三种数据及显式来源/有效期。
 - [ ] 实现世界差分、昼夜时钟、死亡/复活、冷却和新闻事件。
 - [ ] 实现四层 enum 状态机的共用转移契约、分阶段投递与上报汇总。
-- [ ] 在已有 MissionSpec、能力准入、依赖传播、自动 deadline、基础 goal/deadline 与经济 progress 对账上补齐自动任务分解、租约、其他任务 checkpoint/progress、超时归档、去重和有限重规划；当前实时策略仍使用无依赖的默认契约。
+- [ ] 在已有 MissionSpec、能力准入、依赖传播、自动 deadline、基础 goal/deadline、经济 progress 对账与拒绝有限重规划上补齐自动任务分解、租约、其他任务 checkpoint/progress、超时归档、去重及完整 Blocked/Suspended 恢复；当前实时策略仍使用无依赖的默认契约。
 - [ ] 在已有世界降级和按层 cursor/poll/ack 基础上，实现实例路由 inbox、关键截断恢复、guard 与转移预算；事件证据保存后才推进消费游标。
 - [ ] 按 DESIGN 第 7 节实现类型化事件/报告，覆盖生产者、payload、路由、scope、优先级和有效期。
 - [ ] 建立 `decision/` 共用上下文，完成 IF04/IF05/IF10/IF11 的信封、过滤、路由和 FSM 驱动；把已实现的 OwnerPath 校验放入所有提交边界，禁止跨层写状态。

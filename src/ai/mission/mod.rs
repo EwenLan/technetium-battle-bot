@@ -8,18 +8,22 @@ mod pioneer;
 mod progress;
 mod record;
 mod registry;
+mod retry;
 
 #[cfg(test)]
 mod deadline_tests;
 #[cfg(test)]
 mod progress_tests;
+#[cfg(test)]
+mod retry_tests;
 
 pub use capability::{CapabilityRejection, check_assignment, role_capabilities};
 pub use construction::BuildPlan;
 pub(crate) use deadline::defense_spec;
 pub use goal::{GoalEvaluation, GoalEvidence, evaluate_goal};
 pub use record::{
-    MissionCancellation, MissionCompletion, MissionReconciliation, MissionResolution, MissionView,
+    MissionCancellation, MissionCompletion, MissionFailure, MissionFailureReason,
+    MissionReconciliation, MissionResolution, MissionView,
 };
 pub use registry::{MissionRegistry, MissionRegistryError};
 
